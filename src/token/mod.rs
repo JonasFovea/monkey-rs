@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fmt::Formatter;
 
-#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 #[allow(dead_code)]
 pub enum TokenType {
     /// # TokenType Enumeration
@@ -88,7 +88,7 @@ impl fmt::Display for TokenType {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.token_type, self.literal)
+        write!(f, "{}", self.literal)
     }
 }
 
