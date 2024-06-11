@@ -122,7 +122,7 @@ impl Parser {
             TokenType::RETURN => { self.parse_return_statement() }
             _ => {
                 self.parse_expression_statement()
-                    .context("Paring expression statement.")
+                    .context("Parsing expression statement.")
             }
         };
     }
@@ -152,7 +152,8 @@ impl Parser {
         }))
     }
     fn expect_peek(&mut self, expected_type: TokenType) -> Result<bool> {
-        let token = self.peek_token.as_ref().with_context(|| format!("Expected a peek token, but found {:?}", &self.peek_token))?;
+        let token = self.peek_token.as_ref()
+            .with_context(|| format!("Expected a peek token, but found {:?}", &self.peek_token))?;
         if token.token_type == expected_type {
             self.next_token();
             return Ok(true);
@@ -186,7 +187,7 @@ impl Parser {
     }
     fn parse_expression(&mut self, precedence: &Precedence) -> Result<Expression> {
         let prefix_parse_fn = Parser::get_prefix_parser(&self.current_token)
-            .with_context(|| format!("Loading prefix parser for expression for operator: {:?}.", &self.current_token))?;
+            .with_context(|| format!("Loading prefix parser for expression with operator: {:?}.", &self.current_token))?;
 
         if let ParseFunction::PREFIX(func) = prefix_parse_fn {
             let mut left_expr = func(self).context("Parsing left expression with prefix parser.")?;
@@ -303,8 +304,11 @@ impl Parser {
 
     fn parse_grouped_expression(&mut self) -> Result<Expression> {
         self.next_token();
-        Ok(self.parse_expression(&Precedence::LOWEST)
-            .context("Parsing inner expression of group.")?)
+        let exp = self.parse_expression(&Precedence::LOWEST)
+            .context("Parsing inner expression of group.")?;
+        self.expect_peek(TokenType::RPAREN)
+            .context("Peeking right parenthesis of grouped expression.")?;
+        Ok(exp)
     }
 
     fn parse_if_expression(&mut self) -> Result<Expression> {
