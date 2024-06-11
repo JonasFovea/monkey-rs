@@ -1,5 +1,6 @@
 #[cfg(test)]
 use std::ops::Deref;
+
 use crate::ast::*;
 
 #[test]
@@ -17,14 +18,6 @@ fn test_let_statement() {
     }
 }
 
-#[allow(unused)]
-fn check_parser_errors(parser: &Parser) {
-    for err in &parser.parsing_errors {
-        eprintln!("Parsing error: {}", err);
-    }
-    assert!(parser.parsing_errors.is_empty());
-}
-
 #[test]
 fn test_return_statement() {
     let input = "return 5;\
@@ -33,8 +26,6 @@ fn test_return_statement() {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-
-    check_parser_errors(&parser);
 
     assert!(program.is_ok());
 
@@ -79,8 +70,6 @@ fn test_identifier_expression() {
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
 
-    check_parser_errors(&parser);
-
     assert!(program.is_ok());
 
     let program = program.unwrap();
@@ -102,9 +91,7 @@ fn test_integer_literal_expression() {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-
-    check_parser_errors(&parser);
-
+    
     assert!(program.is_ok());
 
     let program = program.unwrap();
@@ -128,9 +115,7 @@ fn test_parsing_prefix_expressions() {
         let lex = Lexer::new(lit);
         let mut parser = Parser::new(lex.unwrap());
         let program = parser.parse_program();
-
-        check_parser_errors(&parser);
-
+        
         assert!(program.is_ok());
 
         let program = program.unwrap();
@@ -168,8 +153,6 @@ fn test_parsing_infix_expressions() {
         let lex = Lexer::new(lit);
         let mut parser = Parser::new(lex.unwrap());
         let program = parser.parse_program();
-
-        check_parser_errors(&parser);
 
         assert!(program.is_ok());
 
@@ -242,7 +225,6 @@ fn expect_parse_result_str(input: &str, expected: &str) {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-    check_parser_errors(&parser);
 
     assert!(program.is_ok());
 
@@ -257,7 +239,6 @@ fn test_if_expression() {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-    check_parser_errors(&parser);
 
     assert!(program.is_ok());
 
@@ -285,7 +266,6 @@ fn test_if_else_expression() {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-    check_parser_errors(&parser);
 
     assert!(program.is_ok());
 
@@ -319,8 +299,7 @@ fn test_function_literal_parsing() {
     let input = "fn (x, y) { x + y; }";
     let mut parser = Parser::new(Lexer::new(input).unwrap());
     let program = parser.parse_program();
-    check_parser_errors(&parser);
-
+    
     assert!(program.is_ok());
 
     let program = program.unwrap();
@@ -348,7 +327,6 @@ fn test_function_parameter_parsing() {
     for (input, expected) in tests {
         let mut parser = Parser::new(Lexer::new(input).unwrap());
         let program = parser.parse_program();
-        check_parser_errors(&parser);
 
         assert!(program.is_ok());
 
@@ -371,7 +349,6 @@ fn test_call_expression_parsing() {
     let input = "add(1, 2 * 3, 4 + 5);";
     let mut parser = Parser::new(Lexer::new(input).unwrap());
     let program = parser.parse_program();
-    check_parser_errors(&parser);
 
     assert!(program.is_ok());
 

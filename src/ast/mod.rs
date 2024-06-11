@@ -78,7 +78,6 @@ pub struct Parser {
     lexer: Lexer,
     current_token: Option<Token>,
     peek_token: Option<Token>,
-    parsing_errors: Vec<String>,
 }
 
 impl Parser {
@@ -86,8 +85,7 @@ impl Parser {
         let mut p = Parser {
             lexer,
             current_token: None,
-            peek_token: None,
-            parsing_errors: Vec::new(),
+            peek_token: None
         };
         p.next_token();
         p.next_token();
@@ -301,7 +299,6 @@ impl Parser {
             _ => None
         }
     }
-
     fn parse_grouped_expression(&mut self) -> Result<Expression> {
         self.next_token();
         let exp = self.parse_expression(&Precedence::LOWEST)
@@ -310,7 +307,6 @@ impl Parser {
             .context("Peeking right parenthesis of grouped expression.")?;
         Ok(exp)
     }
-
     fn parse_if_expression(&mut self) -> Result<Expression> {
         let token = self.current_token.clone().unwrap();
         self.expect_peek(TokenType::LPAREN)
@@ -361,7 +357,6 @@ impl Parser {
         }
         false
     }
-
     fn parse_function_literal(&mut self) -> Result<Expression> {
         let tok = self.current_token.clone()
             .with_context(|| format!("Current token missing: {:?}", &self.current_token))?;
@@ -407,7 +402,6 @@ impl Parser {
 
         Ok(identifiers)
     }
-
     fn parse_call_expression(&mut self, left: &Expression) -> Result<Expression> {
         let tok = self.current_token.clone()
             .with_context(|| format!("Current token missing: {:?}", &self.current_token))?;
