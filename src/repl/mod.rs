@@ -1,9 +1,11 @@
 use std::io;
 use std::io::Write;
-use crate::ast::Parser;
-use crate::lexer::Lexer;
 
 use whoami;
+
+use crate::ast::Parser;
+use crate::evaluator::eval_program;
+use crate::lexer::Lexer;
 
 pub fn start() {
     println!("Hello {}, welcome to the monkey-rs repl!", whoami::username());
@@ -16,16 +18,25 @@ pub fn start() {
                 let lexer = Lexer::new(&input).unwrap();
                 let mut parser = Parser::new(lexer);
                 let program = parser.parse_program();
-                if let Err(e) = program{
-                    eprintln!("Error: {}", &e);
-                    for (i, cause) in e.chain().skip(1).enumerate() {
+                if let Err(e) = program {
+                    eprintln!("Parsing error:");
+                    for (i, cause) in e.chain().enumerate() {
                         eprintln!("\t{}: {}", i, cause);
                     }
                     continue;
                 }
                 let program = program.unwrap();
-                println!("{}", program);
-            },
+                let evaluated = eval_program(program);
+                if let Ok(obj) = evaluated {
+                    println!("{obj}");
+                } else if let Err(e) = evaluated { 
+                    eprintln!("Evaluation error:");
+                    for (i, cause) in e.chain().enumerate() {
+                        eprintln!("\t{i}: {cause}");
+                    }
+                    continue;
+                }
+            }
             Err(e) => {
                 println!("Error reading input: {:?}", e);
                 break;

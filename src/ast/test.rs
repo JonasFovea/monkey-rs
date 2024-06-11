@@ -91,7 +91,7 @@ fn test_integer_literal_expression() {
     let lex = Lexer::new(input);
     let mut parser = Parser::new(lex.unwrap());
     let program = parser.parse_program();
-    
+
     assert!(program.is_ok());
 
     let program = program.unwrap();
@@ -115,7 +115,7 @@ fn test_parsing_prefix_expressions() {
         let lex = Lexer::new(lit);
         let mut parser = Parser::new(lex.unwrap());
         let program = parser.parse_program();
-        
+
         assert!(program.is_ok());
 
         let program = program.unwrap();
@@ -299,7 +299,7 @@ fn test_function_literal_parsing() {
     let input = "fn (x, y) { x + y; }";
     let mut parser = Parser::new(Lexer::new(input).unwrap());
     let program = parser.parse_program();
-    
+
     assert!(program.is_ok());
 
     let program = program.unwrap();

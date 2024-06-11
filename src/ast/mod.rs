@@ -10,41 +10,41 @@ use crate::token::{Token, TokenType};
 use anyhow::{anyhow, bail, Context, Result};
 
 #[derive(Debug, Clone)]
-struct LetStatement {
+pub struct LetStatement {
     token: Token,
     identifier: Identifier,
     value: Expression,
 }
 
 #[derive(Debug, Clone)]
-struct ReturnStatement {
+pub struct ReturnStatement {
     token: Token,
-    return_value: Expression,
+    pub return_value: Expression,
 }
 
 #[derive(Debug, Clone)]
-struct ExpressionStatement {
-    token: Token,
-    expression: Expression,
+pub struct ExpressionStatement {
+    pub token: Token,
+    pub expression: Expression,
 }
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
-struct BlockStatement {
+pub struct BlockStatement {
     token: Token,
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 
 #[derive(Debug, Clone)]
-struct Identifier {
+pub struct Identifier {
     token: Token,
     value: String,
 }
 
 #[derive(Debug, Clone)]
 #[allow(non_camel_case_types, dead_code)]
-enum Expression {
+pub enum Expression {
     IDENT(Identifier),
     INT_LITERAL(Token, i64),
     BOOL_LITERAL(Token, bool),
@@ -57,7 +57,7 @@ enum Expression {
 }
 
 #[derive(Debug, Clone)]
-enum Statement {
+pub enum Statement {
     LET(LetStatement),
     RETURN(ReturnStatement),
     EXPRESSION(ExpressionStatement),
@@ -65,7 +65,7 @@ enum Statement {
 
 #[derive(Debug)]
 pub struct Program {
-    statements: Vec<Statement>,
+    pub statements: Vec<Statement>,
 }
 
 impl Program {

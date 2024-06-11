@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 use crate::token::{Token, TokenType};
 use crate::token::TokenType::*;
+use anyhow::{bail, Result};
 
 pub struct Lexer {
     input: Vec<char>,
@@ -25,9 +26,9 @@ lazy_static! {
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Result<Self, &str> {
+    pub fn new(input: &str) -> Result<Self> {
         if input.len() < 1 {
-            Err("Input is empty!")
+            bail!("Input is empty!")
         } else {
             Ok(Lexer { input: input.chars().collect(), position: 0, read_position: 1, ch: input.chars().next().unwrap() })
         }
