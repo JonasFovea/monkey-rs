@@ -6,8 +6,12 @@ use whoami;
 use crate::ast::Parser;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
+use crate::object::Environment;
 
 pub fn start() {
+    
+    let mut env = Environment::new();
+    
     println!("Hello {}, welcome to the monkey-rs repl!", whoami::username());
     loop {
         let mut input = String::new();
@@ -26,8 +30,9 @@ pub fn start() {
                     continue;
                 }
                 let program = program.unwrap();
-                let evaluated = eval_program(program);
-                if let Ok(obj) = evaluated {
+                let evaluated = eval_program(program, env.clone());
+                if let Ok((obj, e)) = evaluated {
+                    env = e;
                     println!("{obj}");
                 } else if let Err(e) = evaluated { 
                     eprintln!("Evaluation error:");

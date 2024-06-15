@@ -9,26 +9,26 @@ use crate::token::{Token, TokenType};
 
 use anyhow::{anyhow, bail, Context, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LetStatement {
-    token: Token,
-    identifier: Identifier,
-    value: Expression,
+    pub token: Token,
+    pub identifier: Identifier,
+    pub value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReturnStatement {
     token: Token,
     pub return_value: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ExpressionStatement {
     pub token: Token,
     pub expression: Expression,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(dead_code)]
 pub struct BlockStatement {
     token: Token,
@@ -36,13 +36,13 @@ pub struct BlockStatement {
 }
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Identifier {
     token: Token,
-    value: String,
+    pub value: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 #[allow(non_camel_case_types, dead_code)]
 pub enum Expression {
     IDENT(Identifier),
@@ -56,7 +56,7 @@ pub enum Expression {
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Statement {
     LET(LetStatement),
     RETURN(ReturnStatement),

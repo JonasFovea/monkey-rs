@@ -85,11 +85,11 @@ impl fmt::Display for Identifier {
 impl fmt::Display for BlockStatement {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
-        s.push_str("{ ");
+        s.push_str("{\n");
         for stmt in &self.statements {
-            s.push_str(&format!("{}", stmt));
+            s.push_str(&format!("\t{}", stmt));
         }
-        s.push_str(" }");
+        s.push_str("\n}");
         write!(f, "{}", s)
     }
 }
