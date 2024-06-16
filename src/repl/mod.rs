@@ -1,5 +1,7 @@
 use std::io;
 use std::io::Write;
+use std::rc::Rc;
+use std::sync::Mutex;
 
 use whoami;
 
@@ -10,7 +12,7 @@ use crate::object::Environment;
 
 pub fn start() {
     
-    let mut env = Environment::new();
+    let env = Rc::new(Mutex::new(Environment::new()));
     
     println!("Hello {}, welcome to the monkey-rs repl!", whoami::username());
     loop {
@@ -31,8 +33,7 @@ pub fn start() {
                 }
                 let program = program.unwrap();
                 let evaluated = eval_program(program, env.clone());
-                if let Ok((obj, e)) = evaluated {
-                    env = e;
+                if let Ok(obj) = evaluated {
                     println!("{obj}");
                 } else if let Err(e) = evaluated { 
                     eprintln!("Evaluation error:");

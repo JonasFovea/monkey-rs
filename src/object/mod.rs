@@ -1,18 +1,48 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Formatter;
+use std::rc::Rc;
+use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{BlockStatement, Identifier};
 
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Clone)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
     Return(Box<Object>),
-    Function(Vec<Identifier>, BlockStatement, Environment),
+    Function(Vec<Identifier>, BlockStatement, Rc<Mutex<Environment>>),
     Null,
+}
+
+impl std::cmp::PartialEq for Object {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Object::Integer(a) => if let Object::Integer(b) = other {
+                a == b
+            } else { false },
+            Object::Boolean(a) => if let Object::Boolean(b) = other {
+                a == b
+            } else { false },
+            Object::Return(a) => if let Object::Return(b) = other {
+                *a == *b
+            } else { false }
+            Object::Function(ai, ab, ae) => if let Object::Function(bi, bb, be) = other {
+                ai == bi && ab == bb && Rc::ptr_eq(ae, be)
+            } else { false },
+            Object::Null => {
+                if let Object::Null = other {
+                    true
+                } else { false }
+            }
+        }
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
 }
 
 impl fmt::Display for Object {
@@ -36,7 +66,7 @@ impl fmt::Debug for Object {
             Object::Null => "Null".to_string(),
             Object::Return(val) => format!("return {:?}", val),
             Object::Function(params, body, env) => {
-                format!("fn({:?}) {:?}\nFunction {}", IdentifierVec(params.clone()), body, env)
+                format!("fn({:?}) {:?}\nFunction {}", IdentifierVec(params.clone()), body, env.lock().unwrap())
             }
         };
         write!(f, "{}", formatted)
@@ -58,10 +88,10 @@ impl fmt::Debug for IdentifierVec {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Environment {
     store: HashMap<String, Object>,
-    outer: Option<Box<Environment>>,
+    outer: Option<Rc<Mutex<Environment>>>,
 }
 
 impl Environment {
@@ -69,8 +99,8 @@ impl Environment {
         Environment { store: HashMap::new(), outer: None }
     }
 
-    pub fn new_enclosed(outer: Environment) -> Self {
-        Environment { store: HashMap::new(), outer: Some(Box::new(outer)) }
+    pub fn new_enclosed(outer: Rc<Mutex<Environment>>) -> Self {
+        Environment { store: HashMap::new(), outer: Some(outer) }
     }
 
     pub fn get(&self, name: &str) -> Result<Object> {
@@ -79,7 +109,9 @@ impl Environment {
             return Ok(o.clone());
         }
         if let Some(outer) = &self.outer {
-            return Ok(outer.get(name).context("Searching outer environment for identifier.")?.clone());
+            return Ok(outer.lock().unwrap().get(name)
+                .context("Searching outer environment for identifier.")?
+                .clone());
         }
 
         bail!("Identifier not found: {}", name);
@@ -94,6 +126,14 @@ impl Environment {
     }
 }
 
+impl std::cmp::PartialEq for Environment {
+    fn eq(&self, other: &Self) -> bool {
+        self.store == other.store && if let (Some(a), Some(b)) = (&self.outer, &other.outer) {
+            Rc::ptr_eq(a, b)
+        } else { self.outer.is_none() == other.outer.is_none() }
+    }
+}
+
 impl fmt::Display for Environment {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut out = String::new();
@@ -104,7 +144,7 @@ impl fmt::Display for Environment {
             .join(",\n");
         out.push_str(&vals);
         if let Some(env) = &self.outer {
-            let outer_str = format!("\nouter {}", env)
+            let outer_str = format!("\nouter {}", env.lock().unwrap())
                 .replace("\n", "\n\t");
             out.push_str(&outer_str);
         }

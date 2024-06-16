@@ -1,3 +1,5 @@
+use std::rc::Rc;
+use std::sync::Mutex;
 use anyhow::{Context, Result};
 
 use crate::ast::Parser;
@@ -244,9 +246,9 @@ fn test_eval(input: &str) -> Result<Object> {
     let program = parser.parse_program()
         .context("Parsing program.")?;
 
-    let env = Environment::new();
+    let env = Rc::new(Mutex::new(Environment::new()));
 
-    let (res, _) = eval_program(program, env)
+    let res = eval_program(program, env)
         .context("Evaluating test program.")?;
     Ok(res)
 }

@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use std::sync::Mutex;
+
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
@@ -7,131 +10,128 @@ use crate::token::{Token, TokenType};
 #[cfg(test)]
 mod test;
 
-pub fn eval_program(program: Program, env: Environment) -> Result<(Object, Environment)> {
+pub fn eval_program(program: Program, env: Rc<Mutex<Environment>>) -> Result<Object> {
     eval_statements(program.statements, env)
         .context("Evaluating statements of program.")
 }
 
-fn eval_statements(stmts: Vec<Statement>, env: Environment) -> Result<(Object, Environment)> {
+fn eval_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
-    let mut env = env;
+    let env = env;
     for stmt in stmts {
         if let Statement::RETURN(_) = &stmt {
-            let (value, env) = eval_statement(stmt, env)
+            let value = eval_statement(stmt, env.clone())
                 .context("Evaluating return statement.")?;
-            return Ok((value, env));
+            return Ok(value);
         }
 
-        (last_value, env) = eval_statement(stmt, env)
+        last_value = eval_statement(stmt, env.clone())
             .context("Evaluating statement.")?;
         if let Object::Return(val) = last_value {
-            return Ok((*val, env));
+            return Ok(*val);
         }
     }
-    Ok((last_value, env))
+    Ok(last_value)
 }
 
-fn eval_block_statements(stmts: Vec<Statement>, env: Environment) -> Result<(Object, Environment)> {
+fn eval_block_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
-    let mut env = env;
+    let env = env;
     for stmt in stmts {
         if let Statement::RETURN(_) = &stmt {
-            let (obj, env) = eval_statement(stmt, env)
+            let obj = eval_statement(stmt, env.clone())
                 .context("Evaluating return statement.")?;
-            return Ok((
+            return Ok(
                 Object::Return(
                     Box::new(obj)
-                ), env)
+                )
             );
         }
 
-        (last_value, env) = eval_statement(stmt, env)
+        last_value = eval_statement(stmt, env.clone())
             .context("Evaluating statement.")?;
         if let Object::Return(_) = &last_value {
-            return Ok((last_value, env));
+            return Ok(last_value);
         }
     }
-    Ok((last_value, env))
+    Ok(last_value)
 }
 
-pub fn eval_statement(stmt: Statement, env: Environment) -> Result<(Object, Environment)> {
+pub fn eval_statement(stmt: Statement, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match stmt {
         Statement::EXPRESSION(
-            exp_stmt) => eval_expression(exp_stmt.expression, env)
+            exp_stmt) => eval_expression(exp_stmt.expression, env.clone())
             .context("Evaluating expression."),
         Statement::RETURN(ret) => {
-            eval_expression(ret.return_value, env)
+            eval_expression(ret.return_value, env.clone())
                 .context("Evaluating return value.")
         }
         Statement::LET(LetStatement { token: _, identifier: ident, value: val }) => {
-            let (value, mut env) = eval_expression(val, env)
+            let value = eval_expression(val, env.clone())
                 .context("Evaluating value of let statement.")?;
 
-            env.set(&ident.value, value)
+            env.lock().unwrap().set(&ident.value, value)
                 .context("Setting identifier value.")?;
-            
-            Ok((Object::Null, env))
+
+            Ok(Object::Null)
         }
     }
 }
 
-pub fn eval_expression(exp: Expression, env: Environment) -> Result<(Object, Environment)> {
+pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match exp {
-        Expression::INT_LITERAL(_, i) => Ok((Object::Integer(i), env)),
-        Expression::BOOL_LITERAL(_, b) => Ok((native_bool_to_boolean_object(b), env)),
+        Expression::INT_LITERAL(_, i) => Ok(Object::Integer(i)),
+        Expression::BOOL_LITERAL(_, b) => Ok(native_bool_to_boolean_object(b)),
         Expression::PREFIX(op, exp) => {
-            let (right, env) = eval_expression(*exp, env)
+            let right = eval_expression(*exp, env.clone())
                 .context("Evaluating right expression of prefix operator.")?;
 
-            Ok((eval_prefix_expression(op, right)
-                    .context("Evaluating prefix expression.")?, env))
+            Ok(eval_prefix_expression(op, right)
+                .context("Evaluating prefix expression.")?)
         }
         Expression::INFIX(l, op, r) => {
-            let (left, env) = eval_expression(*l, env)
+            let left = eval_expression(*l, env.clone())
                 .context("Evaluating left expression of infix expression.")?;
-            let (right, env) = eval_expression(*r, env)
+            let right = eval_expression(*r, env.clone())
                 .context("Evaluating right expression of infix expression.")?;
 
-            Ok((eval_infix_expression(op, left, right)
-                    .context("Evaluating infix expression.")?,
-                env))
+            Ok(eval_infix_expression(op, left, right)
+                .context("Evaluating infix expression.")?
+            )
         }
         Expression::IF_EXPRESSION(_, cond, block, alt) => {
-            let (res, env) = eval_if_expression(*cond, block, alt, env)
+            let res = eval_if_expression(*cond, block, alt, env.clone())
                 .context("Evaluating if expression.")?;
-            Ok((res, env))
+            Ok(res)
         }
         Expression::IDENT(ident) => {
-            let value = env.get(&ident.value)
+            let value = env.lock().unwrap().get(&ident.value)
                 .context("Retrieving identifier value from environment.")?;
-            Ok((value.clone(), env))
+            Ok(value.clone())
         }
         Expression::FUNCTION(_, params, body) => {
-            Ok((Object::Function(params, body, Environment::new_enclosed(env.clone())), env))
+            Ok(Object::Function(params, body, Rc::new(Mutex::new(Environment::new_enclosed(env.clone())))))
         }
         Expression::CALL(_, func, args) => {
-            let (function, env) = eval_expression(*func, env)
+            let function = eval_expression(*func, env.clone())
                 .context("Evaluating function expression.")?;
-            let (args, env) = eval_expressions(args, env)
+            let args = eval_expressions(args, env.clone())
                 .context("Evaluating function arguments.")?;
-            Ok((apply_function(function, args)
-                    .context("Evaluating function with arguments from call expression.")?,
-                env))
+            Ok(apply_function(function, args)
+                .context("Evaluating function with arguments from call expression.")?)
         }
         e => bail!("Unknown expression type: {:?}", e)
     }
 }
 
-fn eval_expressions(expressions: Vec<Expression>, env: Environment) -> Result<(Vec<Object>, Environment)> {
-    let mut env = env;
+fn eval_expressions(expressions: Vec<Expression>, env: Rc<Mutex<Environment>>) -> Result<Vec<Object>> {
     let mut objects = Vec::with_capacity(expressions.len());
     for exp in expressions {
-        let (o, e) = eval_expression(exp, env)
+        let o = eval_expression(exp, env.clone())
             .context("Evaluating one of multiple expressions.")?;
-        env = e;
         objects.push(o);
     }
-    Ok((objects, env))
+    Ok(objects)
 }
 
 fn eval_prefix_expression(operator: Token, right: Object) -> Result<Object> {
@@ -175,12 +175,21 @@ fn eval_minus_prefix_expression(right: Object) -> Result<Object> {
 
 fn eval_integer_infix_expression(operator: Token, left: i64, right: i64) -> Result<Object> {
     match operator.token_type {
-        TokenType::PLUS => { Ok(Object::Integer(left + right)) }
-        TokenType::MINUS => { Ok(Object::Integer(left - right)) }
-        TokenType::ASTERISK => { Ok(Object::Integer(left * right)) }
+        TokenType::PLUS => {
+            Ok(Object::Integer(left.checked_add(right)
+                .context("Addition overflowed!")?))
+        }
+        TokenType::MINUS => {
+            Ok(Object::Integer(left.checked_sub(right)
+                .context("Subtraction overflowed!")?))
+        }
+        TokenType::ASTERISK => {
+            Ok(Object::Integer(left.checked_mul(right)
+                .context("Multiplication overflowed!")?))
+        }
         TokenType::SLASH => {
-            if right == 0 { return Ok(Object::Null); };
-            Ok(Object::Integer(left / right))
+            Ok(Object::Integer(left.checked_div(right)
+                .with_context(|| format!("Illegal division: {}/{}", left, right))?))
         }
         TokenType::LT => { Ok(native_bool_to_boolean_object(left < right)) }
         TokenType::GT => { Ok(native_bool_to_boolean_object(left > right)) }
@@ -200,18 +209,18 @@ fn eval_boolean_infix_expression(operator: Token, left: bool, right: bool) -> Re
     }
 }
 
-fn eval_if_expression(condition: Expression, block: BlockStatement, alternative: Option<BlockStatement>, env: Environment) -> Result<(Object, Environment)> {
-    let (cond, env) = eval_expression(condition, env)
+fn eval_if_expression(condition: Expression, block: BlockStatement, alternative: Option<BlockStatement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
+    let cond = eval_expression(condition, env.clone())
         .context("Evaluating condition of if expression.")?;
 
     if is_truthy(cond) {
-        return Ok(eval_block_statements(block.statements, env)
+        return Ok(eval_block_statements(block.statements, env.clone())
             .context("Evaluating block statements of if expression.")?);
     } else if let Some(alt) = alternative {
-        return Ok(eval_block_statements(alt.statements, env)
+        return Ok(eval_block_statements(alt.statements, env.clone())
             .context("Evaluating alternative statements of if expression.")?);
     }
-    Ok((Object::Null, env))
+    Ok(Object::Null)
 }
 
 fn native_bool_to_boolean_object(b: bool) -> Object {
@@ -220,17 +229,18 @@ fn native_bool_to_boolean_object(b: bool) -> Object {
 
 fn apply_function(func: Object, args: Vec<Object>) -> Result<Object> {
     if let Object::Function(params, body, env) = func {
-        let extended_env: Environment = extend_function_env(params, args, env)
-            .context("Extending exising environment with parameter/argument pairs.")?;
+        let extended_env =
+            extend_function_env(params, args, env.clone())
+                .context("Extending exising environment with parameter/argument pairs.")?;
         // println!("Function environment: \n{extended_env}");
-        let (evaluated, _) = eval_block_statements(body.statements, extended_env)
+        let evaluated = eval_block_statements(body.statements, extended_env.clone())
             .context("Evaluating function body.")?;
 
         return Ok(unwrap_return_value(evaluated));
     } else { bail!("Object {:?} is not a function!", func); }
 }
 
-fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, environment: Environment) -> Result<Environment> {
+fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, environment: Rc<Mutex<Environment>>) -> Result<Rc<Mutex<Environment>>> {
     if parameters.len() != arguments.len() {
         bail!(
             "Number of parameters and arguments do not match! Expected: {} Got: {}",
@@ -238,9 +248,9 @@ fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, envi
             arguments.len()
         );
     }
-    let mut env = environment;
+    let env = environment;
     for (param, arg) in parameters.iter().zip(arguments) {
-        env.set(&param.value, arg)
+        env.lock().unwrap().set(&param.value, arg)
             .context("Inserting parameter/argument pair into function environment.")?;
     }
     Ok(env)
