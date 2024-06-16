@@ -12,6 +12,7 @@ pub enum TokenType {
     
     IDENT,
     INT,
+    STRING,
 
     ASSIGN,
     PLUS,
@@ -34,6 +35,8 @@ pub enum TokenType {
     RPAREN,
     LBRACE,
     RBRACE,
+    LBRACKET,
+    RBRACKET,
 
     FUNCTION,
     LET,
@@ -82,6 +85,9 @@ impl fmt::Display for TokenType {
             TokenType::FALSE => "FALSE",
             TokenType::TRUE => "TRUE",
             TokenType::RETURN => "RETURN",
+            TokenType::STRING => "STRING",
+            TokenType::LBRACKET => "LBRACKET",
+            TokenType::RBRACKET => "RBRACKET",
         })
     }
 }

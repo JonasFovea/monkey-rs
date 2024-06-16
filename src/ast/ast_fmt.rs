@@ -1,6 +1,7 @@
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Deref;
+
 use crate::ast::{BlockStatement, Expression, ExpressionStatement, Identifier, LetStatement, Program, ReturnStatement, Statement};
 
 impl fmt::Display for ExpressionStatement {
@@ -39,7 +40,14 @@ impl fmt::Display for Expression {
                 let arguments = argument_strings.join(", ");
                 write!(f, "{}({})", function, arguments)
             }
-            _ => { write!(f, "Type {:?} cant be formatted!", self) }
+            Expression::STRING_LITERAL(_, s) => { write!(f, "\"{}\"", s) }
+            Expression::None => write!(f, "{{NONE Expression}}"),
+            Expression::ARRAY_LITERAL(_, elems) => {
+                let concated = elems.iter().map(|e| format!("{}", e))
+                    .collect::<Vec<String>>().join(", ");
+                write!(f, "[{}]", concated)
+            },
+            Expression::INDEX_EXPRESSION(_, left, idx) => {write!(f, "({}[{}])", left, idx)}
         }
     }
 }

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+
+use anyhow::{bail, Result};
 use lazy_static::lazy_static;
+
 use crate::token::{Token, TokenType};
 use crate::token::TokenType::*;
-use anyhow::{bail, Result};
 
 pub struct Lexer {
     input: Vec<char>,
@@ -62,6 +64,16 @@ impl Lexer {
             '{' => Token::new(LBRACE, "{"),
             '}' => Token::new(RBRACE, "}"),
             '\0' => Token::new(EOF, ""),
+            '"' => {
+                let literal = self.read_string();
+                if let Err(_) = literal {
+                    Token::new(TokenType::ILLEGAL, &self.ch.to_string())
+                } else {
+                    Token::new(TokenType::STRING, &literal.unwrap())
+                }
+            },
+            '[' => Token::new(TokenType::LBRACKET, "["),
+            ']' => Token::new(TokenType::RBRACKET, "]"),
             c => {
                 if is_letter(c) {
                     let literal = self.read_identifier();
@@ -115,6 +127,18 @@ impl Lexer {
             Token::new(two_char_token, &literal)
         } else { Token::new(default_token, &first.to_string()) }
     }
+    fn read_string(&mut self) -> Result<String, &str> {
+        let position = self.position + 1;
+        while self.peek_char() != '\0' {
+            self.read_char();
+            if self.ch == '"' {
+                break;
+            } else if self.ch == '\0' {
+                return Err("Found EOF, expected closing double quotes!");
+            }
+        }
+        return Ok(String::from_iter(self.input[position..self.position].iter()));
+    }
 }
 
 fn is_letter(c: char) -> bool {
@@ -132,7 +156,6 @@ fn lookup_ident(ident: &str) -> TokenType {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     #[test]
     fn test_next_token() {
@@ -155,7 +178,10 @@ mod tests {
             10 == 10;\
             10 != 9;\
             10 >= 8;\
-            10 <= 11;";
+            10 <= 11;\
+            \"foobar\"\
+            \"foo bar\"\
+            [1, 2];";
         let tests = vec![
             Token::new(LET, "let"),
             Token::new(IDENT, "five"),
@@ -237,6 +263,14 @@ mod tests {
             Token::new(INT, "10"),
             Token::new(LEQ, "<="),
             Token::new(INT, "11"),
+            Token::new(SEMICOLON, ";"),
+            Token::new(STRING, "foobar"),
+            Token::new(STRING, "foo bar"),
+            Token::new(LBRACKET, "["),
+            Token::new(INT, "1"),
+            Token::new(COMMA, ","),
+            Token::new(INT, "2"),
+            Token::new(RBRACKET, "]"),
             Token::new(SEMICOLON, ";"),
             Token::new(EOF, ""),
         ];

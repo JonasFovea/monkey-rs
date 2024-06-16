@@ -200,6 +200,8 @@ fn test_operator_precedence_parsing() {
         ("a + add(b*c) +d", "((a + add((b * c))) + d)"),
         ("add(a,b,1,2*3,4+5,add(6,7*8))", "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"),
         ("add(a+b+c*d/f+g)", "add((((a + b) + ((c * d) / f)) + g))"),
+        ("a * [1,2,3,4][b*c]*d","((a * ([1, 2, 3, 4][(b * c)])) * d)"),
+        ("add( a* b[2], b[1], 2 * [1,2][1])","add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))"),
     ];
 
     for (input, expected) in tests {
@@ -367,4 +369,74 @@ fn test_call_expression_parsing() {
             assert_eq!(format!("{}", &args[2]), "(4 + 5)");
         }
     }
+}
+
+#[test]
+fn test_string_literal_expression() {
+    let input = "\"hello world\"";
+    let lexer = Lexer::new(input).unwrap();
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+
+    assert!(program.is_ok());
+
+    let program = program.unwrap();
+
+    assert_eq!(program.statements.len(), 1);
+
+    let stmt = &program.statements[0];
+
+    if let Statement::EXPRESSION(
+        ExpressionStatement {
+            token: _,
+            expression: Expression::STRING_LITERAL(_, s)
+        }) = stmt {
+        assert_eq!(s, "hello world");
+    }else { assert!(false) }
+}
+
+#[test]
+fn test_parsing_array_literals(){
+    let input = "[1, 2 * 2, 3 + 3]";
+    let lexer = Lexer::new(input).unwrap();
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+    
+    assert!(program.is_ok());
+    
+    let program = program.unwrap();
+    
+    assert_eq!(program.statements.len(), 1);
+
+    if let Statement::EXPRESSION(ExpressionStatement{token: _, expression: Expression::ARRAY_LITERAL(_, expressions)}) = &program.statements[0] {
+        assert_eq!(expressions.len(), 3);
+        assert_eq!("1", format!("{}", &expressions[0]));
+        assert_eq!("(2 * 2)", format!("{}", &expressions[1]));
+        assert_eq!("(3 + 3)", format!("{}", &expressions[2]));
+    }else { assert!(false) }
+    
+    
+    
+}
+
+#[test]
+fn test_parsing_index_expression(){
+    let input = "myArray[1 + 1]";
+    let lexer = Lexer::new(input);
+    let mut parser = Parser::new(lexer.unwrap());
+    let program = parser.parse_program();
+
+    assert!(program.is_ok());
+
+    let program = program.unwrap();
+
+    assert_eq!(program.statements.len(), 1);
+
+    if let Statement::EXPRESSION(
+        ExpressionStatement{token: _, expression: 
+        Expression::INDEX_EXPRESSION(_, left, idx)}) = &program.statements[0] {
+        assert_eq!("myArray", format!("{}", left));
+        assert_eq!("(1 + 1)", format!("{}", idx));
+    }
+    
 }

@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
-use crate::object::{Environment, Object};
+use crate::object::{Environment, get_builtin_function, Object};
 use crate::token::{Token, TokenType};
 
 #[cfg(test)]
@@ -14,7 +14,6 @@ pub fn eval_program(program: Program, env: Rc<Mutex<Environment>>) -> Result<Obj
     eval_statements(program.statements, env)
         .context("Evaluating statements of program.")
 }
-
 fn eval_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
     let env = env;
@@ -33,7 +32,6 @@ fn eval_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result
     }
     Ok(last_value)
 }
-
 fn eval_block_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
     let env = env;
@@ -56,7 +54,6 @@ fn eval_block_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> 
     }
     Ok(last_value)
 }
-
 pub fn eval_statement(stmt: Statement, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match stmt {
         Statement::EXPRESSION(
@@ -77,11 +74,16 @@ pub fn eval_statement(stmt: Statement, env: Rc<Mutex<Environment>>) -> Result<Ob
         }
     }
 }
-
 pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match exp {
         Expression::INT_LITERAL(_, i) => Ok(Object::Integer(i)),
         Expression::BOOL_LITERAL(_, b) => Ok(native_bool_to_boolean_object(b)),
+        Expression::STRING_LITERAL(_, s) => Ok(Object::String(s)),
+        Expression::ARRAY_LITERAL(_, elems) => {
+            let elements = eval_expressions(elems, env.clone())
+                .context("Evaluating array elements.")?;
+            Ok(Object::Array(elements))
+        },
         Expression::PREFIX(op, exp) => {
             let right = eval_expression(*exp, env.clone())
                 .context("Evaluating right expression of prefix operator.")?;
@@ -106,8 +108,12 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
         }
         Expression::IDENT(ident) => {
             let value = env.lock().unwrap().get(&ident.value)
-                .context("Retrieving identifier value from environment.")?;
-            Ok(value.clone())
+                .context("Retrieving identifier value from environment.");
+            if value.is_err() {
+                let _ = get_builtin_function(&ident.value)
+                    .context("Retrieving identifier from builtin functions")?;
+                Ok(Object::Builtin(ident.value.clone()))
+            } else { Ok(value.unwrap().clone()) }
         }
         Expression::FUNCTION(_, params, body) => {
             Ok(Object::Function(params, body, Rc::new(Mutex::new(Environment::new_enclosed(env.clone())))))
@@ -120,10 +126,14 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
             Ok(apply_function(function, args)
                 .context("Evaluating function with arguments from call expression.")?)
         }
+        Expression::INDEX_EXPRESSION(_, left, idx) => {
+            let left = eval_expression(*left, env.clone()).context("Evaluating left side of index expression.")?;
+            let idx = eval_expression(*idx, env.clone()).context("Evaluating index value of index expression.")?;
+            eval_index_expression(left, idx).context("Evaluating index expression.")
+        },
         e => bail!("Unknown expression type: {:?}", e)
     }
 }
-
 fn eval_expressions(expressions: Vec<Expression>, env: Rc<Mutex<Environment>>) -> Result<Vec<Object>> {
     let mut objects = Vec::with_capacity(expressions.len());
     for exp in expressions {
@@ -133,7 +143,6 @@ fn eval_expressions(expressions: Vec<Expression>, env: Rc<Mutex<Environment>>) -
     }
     Ok(objects)
 }
-
 fn eval_prefix_expression(operator: Token, right: Object) -> Result<Object> {
     match operator.token_type {
         TokenType::BANG => eval_bang_expression(right)
@@ -143,7 +152,6 @@ fn eval_prefix_expression(operator: Token, right: Object) -> Result<Object> {
         t => bail!("Unknown prefix operator type: {}", t)
     }
 }
-
 fn eval_infix_expression(operator: Token, left: Object, right: Object) -> Result<Object> {
     match (left, right) {
         (Object::Integer(l), Object::Integer(r)) => {
@@ -154,10 +162,13 @@ fn eval_infix_expression(operator: Token, left: Object, right: Object) -> Result
             eval_boolean_infix_expression(operator, l, r)
                 .context("Evaluating infix expression for two booleans.")
         }
+        (Object::String(l), Object::String(r)) => {
+            eval_string_infix_expression(operator, l, r)
+                .context("Evaluating infix expression for two strings.")
+        }
         (l, r) => bail!("No infix operator defined for objects {:?} and {:?}", l, r)
     }
 }
-
 fn eval_bang_expression(right: Object) -> Result<Object> {
     match right {
         Object::Boolean(b) => Ok(Object::Boolean(!b)),
@@ -165,14 +176,12 @@ fn eval_bang_expression(right: Object) -> Result<Object> {
         r => bail!("Bang operator undefined for {:?}", r)
     }
 }
-
 fn eval_minus_prefix_expression(right: Object) -> Result<Object> {
     match right {
         Object::Integer(i) => Ok(Object::Integer(-i)),
         r => bail!("Prefix minus operator undefined for {:?}", r)
     }
 }
-
 fn eval_integer_infix_expression(operator: Token, left: i64, right: i64) -> Result<Object> {
     match operator.token_type {
         TokenType::PLUS => {
@@ -200,7 +209,6 @@ fn eval_integer_infix_expression(operator: Token, left: i64, right: i64) -> Resu
         t => bail!("Unknown infix operator for two integers: {}", t)
     }
 }
-
 fn eval_boolean_infix_expression(operator: Token, left: bool, right: bool) -> Result<Object> {
     match operator.token_type {
         TokenType::EQ => Ok(native_bool_to_boolean_object(left == right)),
@@ -208,7 +216,16 @@ fn eval_boolean_infix_expression(operator: Token, left: bool, right: bool) -> Re
         t => bail!("Unknown infix operator for two booleans: {}", t)
     }
 }
-
+fn eval_string_infix_expression(operator: Token, left: String, right: String) -> Result<Object> {
+    match operator.token_type {
+        TokenType::PLUS => {
+            let mut left = left;
+            left.push_str(&right);
+            Ok(Object::String(left))
+        }
+        t => bail!("Unknown infix operator for two strings: {}", t)
+    }
+}
 fn eval_if_expression(condition: Expression, block: BlockStatement, alternative: Option<BlockStatement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let cond = eval_expression(condition, env.clone())
         .context("Evaluating condition of if expression.")?;
@@ -222,24 +239,28 @@ fn eval_if_expression(condition: Expression, block: BlockStatement, alternative:
     }
     Ok(Object::Null)
 }
-
 fn native_bool_to_boolean_object(b: bool) -> Object {
     Object::Boolean(b)
 }
-
 fn apply_function(func: Object, args: Vec<Object>) -> Result<Object> {
-    if let Object::Function(params, body, env) = func {
-        let extended_env =
-            extend_function_env(params, args, env.clone())
-                .context("Extending exising environment with parameter/argument pairs.")?;
-        // println!("Function environment: \n{extended_env}");
-        let evaluated = eval_block_statements(body.statements, extended_env.clone())
-            .context("Evaluating function body.")?;
+    match func {
+        Object::Function(params, body, env) => {
+            let extended_env =
+                extend_function_env(params, args, env.clone())
+                    .context("Extending exising environment with parameter/argument pairs.")?;
+            // println!("Function environment: \n{extended_env}");
+            let evaluated = eval_block_statements(body.statements, extended_env.clone())
+                .context("Evaluating function body.")?;
 
-        return Ok(unwrap_return_value(evaluated));
-    } else { bail!("Object {:?} is not a function!", func); }
+            return Ok(unwrap_return_value(evaluated));
+        },
+        Object::Builtin(fn_name) => {
+            let function = get_builtin_function(&fn_name).unwrap();
+            function(args).context("Calling builtin function.")
+        },
+        _ => { bail!("Object {:?} is not a function!", func); }
+    }
 }
-
 fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, environment: Rc<Mutex<Environment>>) -> Result<Rc<Mutex<Environment>>> {
     if parameters.len() != arguments.len() {
         bail!(
@@ -255,19 +276,27 @@ fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, envi
     }
     Ok(env)
 }
-
 fn unwrap_return_value(obj: Object) -> Object {
     match obj {
         Object::Return(o) => *o,
         o => o
     }
 }
-
 fn is_truthy(object: Object) -> bool {
     match object {
         Object::Boolean(b) => b,
         Object::Integer(i) => i != 0,
         Object::Null => false,
         _ => true
+    }
+}
+fn eval_index_expression(left: Object, idx: Object) -> Result<Object>{
+    if let (Object::Array(elems), Object::Integer(i)) = (&left, &idx) {
+        if *i < 0 || *i as usize > elems.len()-1 {
+            return Ok(Object::Null);
+        }
+        return Ok(elems[*i as usize].clone())
+    }else { 
+        bail!("Index operator unknown for types {}[{}]", &left.type_str(), &idx)
     }
 }

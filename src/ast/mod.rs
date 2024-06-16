@@ -1,13 +1,14 @@
-mod test;
-mod ast_fmt;
-
 use std::fmt;
 use std::fmt::Formatter;
 use std::str::FromStr;
+
+use anyhow::{anyhow, bail, Context, Result};
+
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
-use anyhow::{anyhow, bail, Context, Result};
+mod test;
+mod ast_fmt;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LetStatement {
@@ -48,6 +49,9 @@ pub enum Expression {
     IDENT(Identifier),
     INT_LITERAL(Token, i64),
     BOOL_LITERAL(Token, bool),
+    STRING_LITERAL(Token, String),
+    ARRAY_LITERAL(Token, Vec<Expression>),
+    INDEX_EXPRESSION(Token, Box<Expression>, Box<Expression>),
     PREFIX(Token, Box<Expression>),
     INFIX(Box<Expression>, Token, Box<Expression>),
     IF_EXPRESSION(Token, Box<Expression>, BlockStatement, Option<BlockStatement>),
@@ -85,7 +89,7 @@ impl Parser {
         let mut p = Parser {
             lexer,
             current_token: None,
-            peek_token: None
+            peek_token: None,
         };
         p.next_token();
         p.next_token();
@@ -225,6 +229,8 @@ impl Parser {
             TokenType::LPAREN => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_grouped_expression))) }
             TokenType::IF => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_if_expression))) }
             TokenType::FUNCTION => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_function_literal))) }
+            TokenType::STRING => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_string_literal))) }
+            TokenType::LBRACKET => {Some(ParseFunction::PREFIX(Box::new(Parser::parse_array_literal)))}
             _ => None
         }
     }
@@ -241,6 +247,15 @@ impl Parser {
             .with_context(|| format!("Current token missing: {:?}", &self.current_token))?
             .literal.as_str()).unwrap();
         Ok(Expression::INT_LITERAL(self.current_token.clone().unwrap(), val))
+    }
+    fn parse_string_literal(&mut self) -> Result<Expression> {
+        Ok(Expression::STRING_LITERAL(self.current_token.clone().context("Current Token missing!")?, self.current_token.clone().unwrap().literal))
+    }
+    fn parse_array_literal(&mut self) -> Result<Expression> {
+        let expressions = self.parse_expression_list(TokenType::RBRACKET)
+            .context("Parsing array literal expression list.")?;
+        
+        Ok(Expression::ARRAY_LITERAL(Token::new(TokenType::LBRACKET, "["), expressions))
     }
     fn parse_boolean(&mut self) -> Result<Expression> {
         let token = self.current_token.clone()
@@ -296,6 +311,7 @@ impl Parser {
             TokenType::GT |
             TokenType::LT => Some(ParseFunction::INFIX(Box::new(Parser::parse_infix_expression))),
             TokenType::LPAREN => Some(ParseFunction::INFIX(Box::new(Parser::parse_call_expression))),
+            TokenType::LBRACKET => Some(ParseFunction::INFIX(Box::new(Parser::parse_index_expression))),
             _ => None
         }
     }
@@ -410,29 +426,46 @@ impl Parser {
         Ok(Expression::CALL(tok, Box::new(left.clone()), args))
     }
     fn parse_call_arguments(&mut self) -> Result<Vec<Expression>> {
-        if self.peek_token_is(TokenType::RPAREN) {
+        self.parse_expression_list(TokenType::RPAREN)
+            .context("Parsing list of function call arguments.")
+    }
+    fn parse_expression_list(&mut self, end: TokenType) -> Result<Vec<Expression>>{
+        let mut list = Vec::new();
+        
+        if self.peek_token_is(end.clone()){
             self.next_token();
-            return Ok(Vec::new());
+            return Ok(list);
         }
+        
         self.next_token();
-        let mut args = Vec::new();
-        let first = self.parse_expression(&Precedence::LOWEST)
-            .context("Parsing first expression in argument list.")?;
-        args.push(first);
+        list.push(self.parse_expression(&Precedence::LOWEST).context("Parsing first expression in list.")?);
 
         while self.peek_token_is(TokenType::COMMA) {
             self.next_token();
             self.next_token();
             let next = self.parse_expression(&Precedence::LOWEST)
-                .context("Parsing expression in argument list.")?;
-            args.push(next);
+                .context("Parsing expression in list.")?;
+            list.push(next);
         }
 
-        self.expect_peek(TokenType::RPAREN)
-            .context("Peeking right parenthesis of function call.")?;
+        self.expect_peek(end)
+            .context("Peeking end delimiter of expression list.")?;
 
-        Ok(args)
+        Ok(list)
     }
+    
+    fn parse_index_expression(&mut self, left: &Expression) -> Result<Expression>{
+        let tok = self.current_token.clone().context("Missing current token.")?;
+        
+        self.next_token();
+        
+        let idx = self.parse_expression(&Precedence::LOWEST)
+            .context("Parsing index value of index expression.")?;
+        
+        self.expect_peek(TokenType::RBRACKET).context("Peeking end delimiter right bracket.")?;
+        
+        Ok(Expression::INDEX_EXPRESSION(tok,Box::new(left.clone()), Box::new(idx)))
+    } 
 }
 
 #[derive(PartialOrd, PartialEq)]
@@ -444,6 +477,7 @@ enum Precedence {
     PRODUCT = 40,
     PREFIX = 50,
     CALL = 60,
+    INDEX = 70,
 }
 
 impl Precedence {
@@ -454,6 +488,7 @@ impl Precedence {
             TokenType::PLUS | TokenType::MINUS => Precedence::SUM,
             TokenType::ASTERISK | TokenType::SLASH => Precedence::PRODUCT,
             TokenType::LPAREN => Precedence::CALL,
+            TokenType::LBRACKET => Precedence::INDEX,
             _ => Precedence::LOWEST
         }
     }
