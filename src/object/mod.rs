@@ -211,6 +211,7 @@ pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -
         "len" => Ok(Box::new(len)),
         "first" => Ok(Box::new(first)),
         "rest" => Ok(Box::new(rest)),
+        "push" => Ok(Box::new(push)),
         f => bail!("Builtin function {} unknown!", f)
     }
 }
