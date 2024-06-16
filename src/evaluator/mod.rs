@@ -110,9 +110,9 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
             let value = env.lock().unwrap().get(&ident.value)
                 .context("Retrieving identifier value from environment.");
             if value.is_err() {
-                let _ = get_builtin_function(&ident.value)
-                    .context("Retrieving identifier from builtin functions")?;
-                Ok(Object::Builtin(ident.value.clone()))
+                if let Ok(_) = get_builtin_function(&ident.value)
+                    .context("Retrieving identifier from builtin functions") { 
+                Ok(Object::Builtin(ident.value.clone()))} else { bail!("Identifier not found: {}", &ident) }
             } else { Ok(value.unwrap().clone()) }
         }
         Expression::FUNCTION(_, params, body) => {

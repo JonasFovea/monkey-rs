@@ -401,11 +401,11 @@ fn test_parsing_array_literals(){
     let lexer = Lexer::new(input).unwrap();
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
-    
+
     assert!(program.is_ok());
-    
+
     let program = program.unwrap();
-    
+
     assert_eq!(program.statements.len(), 1);
 
     if let Statement::EXPRESSION(ExpressionStatement{token: _, expression: Expression::ARRAY_LITERAL(_, expressions)}) = &program.statements[0] {
@@ -414,9 +414,9 @@ fn test_parsing_array_literals(){
         assert_eq!("(2 * 2)", format!("{}", &expressions[1]));
         assert_eq!("(3 + 3)", format!("{}", &expressions[2]));
     }else { assert!(false) }
-    
-    
-    
+
+
+
 }
 
 #[test]
@@ -433,10 +433,10 @@ fn test_parsing_index_expression(){
     assert_eq!(program.statements.len(), 1);
 
     if let Statement::EXPRESSION(
-        ExpressionStatement{token: _, expression: 
+        ExpressionStatement{token: _, expression:
         Expression::INDEX_EXPRESSION(_, left, idx)}) = &program.statements[0] {
         assert_eq!("myArray", format!("{}", left));
         assert_eq!("(1 + 1)", format!("{}", idx));
     }
-    
+
 }
