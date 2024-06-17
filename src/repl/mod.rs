@@ -8,12 +8,11 @@ use whoami;
 use crate::ast::Parser;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
-use crate::object::Environment;
+use crate::object::{Environment, Object};
 
 pub fn start() {
-    
     let env = Rc::new(Mutex::new(Environment::new()));
-    
+
     println!("Hello {}, welcome to the monkey-rs repl!", whoami::username());
     loop {
         let mut input = String::new();
@@ -34,8 +33,10 @@ pub fn start() {
                 let program = program.unwrap();
                 let evaluated = eval_program(program, env.clone());
                 if let Ok(obj) = evaluated {
-                    println!("{obj}");
-                } else if let Err(e) = evaluated { 
+                    if obj != Object::Null {
+                        println!("{obj}");
+                    }
+                } else if let Err(e) = evaluated {
                     eprintln!("Evaluation error:");
                     for (i, cause) in e.chain().enumerate() {
                         eprintln!("\t{i}: {cause}");

@@ -74,6 +74,7 @@ impl Lexer {
             },
             '[' => Token::new(TokenType::LBRACKET, "["),
             ']' => Token::new(TokenType::RBRACKET, "]"),
+            ':' => Token::new(TokenType::COLON, ":"),
             c => {
                 if is_letter(c) {
                     let literal = self.read_identifier();
@@ -181,7 +182,8 @@ mod tests {
             10 <= 11;\
             \"foobar\"\
             \"foo bar\"\
-            [1, 2];";
+            [1, 2];\
+            {\"foo\": \"bar\"}";
         let tests = vec![
             Token::new(LET, "let"),
             Token::new(IDENT, "five"),
@@ -272,6 +274,11 @@ mod tests {
             Token::new(INT, "2"),
             Token::new(RBRACKET, "]"),
             Token::new(SEMICOLON, ";"),
+            Token::new(LBRACE, "{"),
+            Token::new(STRING, "foo"),
+            Token::new(COLON, ":"),
+            Token::new(STRING, "bar"),
+            Token::new(RBRACE, "}"),
             Token::new(EOF, ""),
         ];
 
@@ -280,7 +287,7 @@ mod tests {
         for expected in tests {
             let token = lexer.next_token();
 
-            // println!("Comparing: expected_{:?}\tactual_{:?}", &expected, &token);
+            println!("Comparing: expected_{:?}\tactual_{:?}", &expected, &token);
             assert_eq!(expected, token);
         }
     }

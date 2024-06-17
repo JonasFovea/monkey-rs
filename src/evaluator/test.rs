@@ -1,11 +1,12 @@
 use std::rc::Rc;
 use std::sync::Mutex;
+
 use anyhow::{Context, Result};
 
 use crate::ast::Parser;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
-use crate::object::{Environment, Object};
+use crate::object::{Environment, HashKey, Object};
 
 #[test]
 fn test_eval_integer_expression() {
@@ -184,6 +185,7 @@ fn test_error_handling() {
         ("if (10 > 1) { if ( 10 > 1) { return true + false; } return 1; }", "Unknown infix operator for two booleans: PLUS"),
         ("foobar", "Identifier not found: foobar"),
         ("\"Hello\" - \"World\"", "Unknown infix operator for two strings: MINUS"),
+        ("{\"name\": \"Monkey\"}[fn(x){x}];", "Object of type Function is not hashable! Supported types: Integer, String, Boolean.")
     ];
 
     for (input, expected) in tests {
@@ -242,25 +244,25 @@ fn test_function_application() {
 }
 
 #[test]
-fn test_string_literal(){
+fn test_string_literal() {
     let input = "\"Hello World!\"";
     let evaluated = test_eval(input);
     if let Ok(Object::String(s)) = evaluated {
         assert_eq!(s, "Hello World!");
-    }else { assert!(false); }
+    } else { assert!(false); }
 }
 
 #[test]
-fn test_string_concatenation(){
+fn test_string_concatenation() {
     let input = "\"Hello\" + \" \" + \"World!\"";
     let evaluated = test_eval(input);
     if let Ok(Object::String(s)) = evaluated {
         assert_eq!(s, "Hello World!");
-    }else { assert!(false); }
+    } else { assert!(false); }
 }
 
 #[test]
-fn test_builtin_functions(){
+fn test_builtin_functions() {
     let int_tests = vec![
         ("len(\"\")", 0),
         ("len(\"four\")", 4),
@@ -270,9 +272,9 @@ fn test_builtin_functions(){
     for (input, expected) in int_tests {
         if let Ok(Object::Integer(i)) = test_eval(input) {
             assert_eq!(expected, i);
-        }else { assert!(false); }
+        } else { assert!(false); }
     }
-    
+
     let failing_tests = vec![
         ("len(1)", "Invalid argument of type: Integer"),
         ("len(\"one\", \"two\")", "Invalid number of arguments! Expected: 1, Got: 2"),
@@ -281,23 +283,23 @@ fn test_builtin_functions(){
     for (input, expected) in failing_tests {
         if let Err(e) = test_eval(input) {
             assert_eq!(expected, e.root_cause().to_string());
-        }else { assert!(false); }
+        } else { assert!(false); }
     }
 }
 
 #[test]
-fn test_array_literals(){
+fn test_array_literals() {
     let input = "[1, 2 * 2, 3 + 3]";
     let evaluated = test_eval(input);
     if let Ok(Object::Array(e)) = evaluated {
         assert_eq!(format!("{}", e[0]), "1");
         assert_eq!(format!("{}", e[1]), "4");
         assert_eq!(format!("{}", e[2]), "6");
-    }else { assert!(false); }
+    } else { assert!(false); }
 }
 
 #[test]
-fn test_array_index_expressions(){
+fn test_array_index_expressions() {
     let tests = vec![
         ("[1,2,3][0]", Object::Integer(1)),
         ("[1,2,3][1]", Object::Integer(2)),
@@ -314,7 +316,58 @@ fn test_array_index_expressions(){
         if let Ok(ev) = test_eval(input) {
             // println!("{:?} == {:?}", &expected, &ev);
             assert_eq!(expected, ev);
-        }else { assert!(false) }
+        } else { assert!(false) }
+    }
+}
+
+#[test]
+fn test_hash_literals() {
+    let input = "let two = \"two\";\
+    {\
+    \"one\": 10 - 9,\
+    two: 1+1,\
+    \"thr\" + \"ee\": 6/2,\
+    4: 4,\
+    true: 5,\
+    false: 6\
+    }";
+
+    let expected = vec![
+        (Object::String("one".to_string()), Object::Integer(1)),
+        (Object::String("two".to_string()), Object::Integer(2)),
+        (Object::String("three".to_string()), Object::Integer(3)),
+        (Object::Integer(4), Object::Integer(4)),
+        (Object::Boolean(true), Object::Integer(5)),
+        (Object::Boolean(false), Object::Integer(6)),
+    ];
+
+
+    let evaluated = test_eval(input);
+    println!("{:?}", evaluated);
+    if let Ok(Object::Hash(map)) = evaluated {
+        for (ek, ev) in expected {
+            assert_eq!(*map.get(&HashKey::from_object(&ek).unwrap()).unwrap(), ev);
+        }
+    } else { assert!(false); }
+}
+
+#[test]
+fn test_hash_index_expressions() {
+    let tests = vec![
+        ("{\"foo\":5}[\"foo\"]", Object::Integer(5)),
+        ("{\"foo\":5}[\"bar\"]", Object::Null),
+        ("let key = \"foo\"; {\"foo\":5}[key]", Object::Integer(5)),
+        ("{}[\"foo\"]", Object::Null),
+        ("{5:5}[5]", Object::Integer(5)),
+        ("{true:5}[true]", Object::Integer(5)),
+        ("{false:5}[false]", Object::Integer(5)),
+    ];
+
+    for (input, expected) in tests {
+        let evaluated = test_eval(input);
+        if let Ok(obj) = evaluated {
+            assert_eq!(obj, expected);
+        } else { assert!(false); }
     }
 }
 
@@ -323,7 +376,6 @@ fn test_eval(input: &str) -> Result<Object> {
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program()
         .context("Parsing program.")?;
-
     let env = Rc::new(Mutex::new(Environment::new()));
 
     let res = eval_program(program, env)

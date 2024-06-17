@@ -1,10 +1,11 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
-use crate::object::{Environment, get_builtin_function, Object};
+use crate::object::{Environment, get_builtin_function, HashKey, Object};
 use crate::token::{Token, TokenType};
 
 #[cfg(test)]
@@ -14,6 +15,7 @@ pub fn eval_program(program: Program, env: Rc<Mutex<Environment>>) -> Result<Obj
     eval_statements(program.statements, env)
         .context("Evaluating statements of program.")
 }
+
 fn eval_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
     let env = env;
@@ -32,6 +34,7 @@ fn eval_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result
     }
     Ok(last_value)
 }
+
 fn eval_block_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let mut last_value = Object::Null;
     let env = env;
@@ -54,6 +57,7 @@ fn eval_block_statements(stmts: Vec<Statement>, env: Rc<Mutex<Environment>>) -> 
     }
     Ok(last_value)
 }
+
 pub fn eval_statement(stmt: Statement, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match stmt {
         Statement::EXPRESSION(
@@ -74,6 +78,7 @@ pub fn eval_statement(stmt: Statement, env: Rc<Mutex<Environment>>) -> Result<Ob
         }
     }
 }
+
 pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<Object> {
     match exp {
         Expression::INT_LITERAL(_, i) => Ok(Object::Integer(i)),
@@ -83,7 +88,11 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
             let elements = eval_expressions(elems, env.clone())
                 .context("Evaluating array elements.")?;
             Ok(Object::Array(elements))
-        },
+        }
+        Expression::HASH_LITERAL(_, _, _) => {
+            eval_hash_literal(exp, env.clone())
+                .context("Evaluating hash literal.")
+        }
         Expression::PREFIX(op, exp) => {
             let right = eval_expression(*exp, env.clone())
                 .context("Evaluating right expression of prefix operator.")?;
@@ -111,8 +120,9 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
                 .context("Retrieving identifier value from environment.");
             if value.is_err() {
                 if let Ok(_) = get_builtin_function(&ident.value)
-                    .context("Retrieving identifier from builtin functions") { 
-                Ok(Object::Builtin(ident.value.clone()))} else { bail!("Identifier not found: {}", &ident) }
+                    .context("Retrieving identifier from builtin functions") {
+                    Ok(Object::Builtin(ident.value.clone()))
+                } else { bail!("Identifier not found: {}", &ident) }
             } else { Ok(value.unwrap().clone()) }
         }
         Expression::FUNCTION(_, params, body) => {
@@ -130,10 +140,11 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
             let left = eval_expression(*left, env.clone()).context("Evaluating left side of index expression.")?;
             let idx = eval_expression(*idx, env.clone()).context("Evaluating index value of index expression.")?;
             eval_index_expression(left, idx).context("Evaluating index expression.")
-        },
+        }
         e => bail!("Unknown expression type: {:?}", e)
     }
 }
+
 fn eval_expressions(expressions: Vec<Expression>, env: Rc<Mutex<Environment>>) -> Result<Vec<Object>> {
     let mut objects = Vec::with_capacity(expressions.len());
     for exp in expressions {
@@ -143,6 +154,7 @@ fn eval_expressions(expressions: Vec<Expression>, env: Rc<Mutex<Environment>>) -
     }
     Ok(objects)
 }
+
 fn eval_prefix_expression(operator: Token, right: Object) -> Result<Object> {
     match operator.token_type {
         TokenType::BANG => eval_bang_expression(right)
@@ -152,6 +164,7 @@ fn eval_prefix_expression(operator: Token, right: Object) -> Result<Object> {
         t => bail!("Unknown prefix operator type: {}", t)
     }
 }
+
 fn eval_infix_expression(operator: Token, left: Object, right: Object) -> Result<Object> {
     match (left, right) {
         (Object::Integer(l), Object::Integer(r)) => {
@@ -169,6 +182,7 @@ fn eval_infix_expression(operator: Token, left: Object, right: Object) -> Result
         (l, r) => bail!("No infix operator defined for objects {:?} and {:?}", l, r)
     }
 }
+
 fn eval_bang_expression(right: Object) -> Result<Object> {
     match right {
         Object::Boolean(b) => Ok(Object::Boolean(!b)),
@@ -176,12 +190,14 @@ fn eval_bang_expression(right: Object) -> Result<Object> {
         r => bail!("Bang operator undefined for {:?}", r)
     }
 }
+
 fn eval_minus_prefix_expression(right: Object) -> Result<Object> {
     match right {
         Object::Integer(i) => Ok(Object::Integer(-i)),
         r => bail!("Prefix minus operator undefined for {:?}", r)
     }
 }
+
 fn eval_integer_infix_expression(operator: Token, left: i64, right: i64) -> Result<Object> {
     match operator.token_type {
         TokenType::PLUS => {
@@ -209,6 +225,7 @@ fn eval_integer_infix_expression(operator: Token, left: i64, right: i64) -> Resu
         t => bail!("Unknown infix operator for two integers: {}", t)
     }
 }
+
 fn eval_boolean_infix_expression(operator: Token, left: bool, right: bool) -> Result<Object> {
     match operator.token_type {
         TokenType::EQ => Ok(native_bool_to_boolean_object(left == right)),
@@ -216,6 +233,7 @@ fn eval_boolean_infix_expression(operator: Token, left: bool, right: bool) -> Re
         t => bail!("Unknown infix operator for two booleans: {}", t)
     }
 }
+
 fn eval_string_infix_expression(operator: Token, left: String, right: String) -> Result<Object> {
     match operator.token_type {
         TokenType::PLUS => {
@@ -226,6 +244,7 @@ fn eval_string_infix_expression(operator: Token, left: String, right: String) ->
         t => bail!("Unknown infix operator for two strings: {}", t)
     }
 }
+
 fn eval_if_expression(condition: Expression, block: BlockStatement, alternative: Option<BlockStatement>, env: Rc<Mutex<Environment>>) -> Result<Object> {
     let cond = eval_expression(condition, env.clone())
         .context("Evaluating condition of if expression.")?;
@@ -239,9 +258,11 @@ fn eval_if_expression(condition: Expression, block: BlockStatement, alternative:
     }
     Ok(Object::Null)
 }
+
 fn native_bool_to_boolean_object(b: bool) -> Object {
     Object::Boolean(b)
 }
+
 fn apply_function(func: Object, args: Vec<Object>) -> Result<Object> {
     match func {
         Object::Function(params, body, env) => {
@@ -253,14 +274,15 @@ fn apply_function(func: Object, args: Vec<Object>) -> Result<Object> {
                 .context("Evaluating function body.")?;
 
             return Ok(unwrap_return_value(evaluated));
-        },
+        }
         Object::Builtin(fn_name) => {
             let function = get_builtin_function(&fn_name).unwrap();
             function(args).context("Calling builtin function.")
-        },
+        }
         _ => { bail!("Object {:?} is not a function!", func); }
     }
 }
+
 fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, environment: Rc<Mutex<Environment>>) -> Result<Rc<Mutex<Environment>>> {
     if parameters.len() != arguments.len() {
         bail!(
@@ -276,12 +298,14 @@ fn extend_function_env(parameters: Vec<Identifier>, arguments: Vec<Object>, envi
     }
     Ok(env)
 }
+
 fn unwrap_return_value(obj: Object) -> Object {
     match obj {
         Object::Return(o) => *o,
         o => o
     }
 }
+
 fn is_truthy(object: Object) -> bool {
     match object {
         Object::Boolean(b) => b,
@@ -290,13 +314,39 @@ fn is_truthy(object: Object) -> bool {
         _ => true
     }
 }
-fn eval_index_expression(left: Object, idx: Object) -> Result<Object>{
-    if let (Object::Array(elems), Object::Integer(i)) = (&left, &idx) {
-        if *i < 0 || *i as usize > elems.len()-1 {
-            return Ok(Object::Null);
+
+fn eval_index_expression(left: Object, idx: Object) -> Result<Object> {
+    match (&left, &idx) {
+        (Object::Array(elems), Object::Integer(i)) => {
+            if *i < 0 || *i as usize > elems.len() - 1 {
+                return Ok(Object::Null);
+            }
+            return Ok(elems[*i as usize].clone());
         }
-        return Ok(elems[*i as usize].clone())
-    }else { 
-        bail!("Index operator unknown for types {}[{}]", &left.type_str(), &idx)
+        (Object::Hash(map), io) => {
+            let key = HashKey::from_object(io).context("Converting index to hash key.")?;
+            if let Some(val) = map.get(&key) {
+                Ok(val.clone())
+            } else { Ok(Object::Null) }
+        }
+        _ => {
+            bail!("Index operator unknown for types {}[{}]", &left.type_str(), &idx)
+        }
     }
+}
+
+fn eval_hash_literal(node: Expression, env: Rc<Mutex<Environment>>) -> Result<Object> {
+    if let Expression::HASH_LITERAL(_, keys, vals) = node {
+        let mut map = HashMap::with_capacity(keys.len());
+        for (k, v) in keys.iter().zip(vals) {
+            let key = eval_expression(k.clone(), env.clone())
+                .context("Evaluating key expression.")?;
+            let value = eval_expression(v.clone(), env.clone())
+                .context("Evaluating key expression.")?;
+            map.insert(HashKey::from_object(&key)
+                           .context("Converting Object into HashKey")?,
+                       value);
+        }
+        Ok(Object::Hash(map))
+    } else { bail!("Expected hash literal, got {}", node) }
 }

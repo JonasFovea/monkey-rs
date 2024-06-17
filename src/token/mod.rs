@@ -30,6 +30,7 @@ pub enum TokenType {
     
     COMMA,
     SEMICOLON,
+    COLON,
 
     LPAREN,
     RPAREN,
@@ -88,6 +89,7 @@ impl fmt::Display for TokenType {
             TokenType::STRING => "STRING",
             TokenType::LBRACKET => "LBRACKET",
             TokenType::RBRACKET => "RBRACKET",
+            TokenType::COLON => "COLON",
         })
     }
 }

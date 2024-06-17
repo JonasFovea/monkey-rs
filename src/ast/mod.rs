@@ -1,8 +1,10 @@
+
 use std::fmt;
 use std::fmt::Formatter;
 use std::str::FromStr;
 
 use anyhow::{anyhow, bail, Context, Result};
+use crate::ast::Expression::HASH_LITERAL;
 
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -51,6 +53,7 @@ pub enum Expression {
     BOOL_LITERAL(Token, bool),
     STRING_LITERAL(Token, String),
     ARRAY_LITERAL(Token, Vec<Expression>),
+    HASH_LITERAL(Token, Vec<Expression>, Vec<Expression>),
     INDEX_EXPRESSION(Token, Box<Expression>, Box<Expression>),
     PREFIX(Token, Box<Expression>),
     INFIX(Box<Expression>, Token, Box<Expression>),
@@ -231,6 +234,7 @@ impl Parser {
             TokenType::FUNCTION => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_function_literal))) }
             TokenType::STRING => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_string_literal))) }
             TokenType::LBRACKET => {Some(ParseFunction::PREFIX(Box::new(Parser::parse_array_literal)))}
+            TokenType::LBRACE => {Some(ParseFunction::PREFIX(Box::new(Parser::parse_hash_literal)))}
             _ => None
         }
     }
@@ -256,6 +260,39 @@ impl Parser {
             .context("Parsing array literal expression list.")?;
         
         Ok(Expression::ARRAY_LITERAL(Token::new(TokenType::LBRACKET, "["), expressions))
+    }
+    fn parse_hash_literal(&mut self) -> Result<Expression> {
+        let tok = self.current_token.clone()
+            .context("Current token missing.")?;
+        
+        let mut keys = Vec::new();
+        let mut vals = Vec::new();
+
+        while !self.peek_token_is(TokenType::RBRACE) {
+            self.next_token();
+            
+            let key = self.parse_expression(&Precedence::LOWEST)
+                .context("Parsing key expression of hash literal.")?;
+            self.expect_peek(TokenType::COLON)
+                .context("Peeking colon after key in hash literal.")?;
+            self.next_token();
+            let val = self.parse_expression(&Precedence::LOWEST)
+                .context("Parsing value expression of hash literal.")?;
+            
+            keys.push(key);
+            vals.push(val);
+            
+            if !self.peek_token_is(TokenType::RBRACE) && 
+                !self.expect_peek(TokenType::COMMA)
+                .context("Peeking for comma in hash literal.")?{
+                bail!("Expected comma for next value or closing brace of hash literal.");
+            }
+        }
+        
+        self.expect_peek(TokenType::RBRACE)
+            .context("Peeking closing brace of hash literal.")?;
+        
+        Ok(HASH_LITERAL(tok, keys, vals))
     }
     fn parse_boolean(&mut self) -> Result<Expression> {
         let token = self.current_token.clone()
@@ -453,7 +490,6 @@ impl Parser {
 
         Ok(list)
     }
-    
     fn parse_index_expression(&mut self, left: &Expression) -> Result<Expression>{
         let tok = self.current_token.clone().context("Missing current token.")?;
         

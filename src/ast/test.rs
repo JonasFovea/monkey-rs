@@ -200,8 +200,8 @@ fn test_operator_precedence_parsing() {
         ("a + add(b*c) +d", "((a + add((b * c))) + d)"),
         ("add(a,b,1,2*3,4+5,add(6,7*8))", "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))"),
         ("add(a+b+c*d/f+g)", "add((((a + b) + ((c * d) / f)) + g))"),
-        ("a * [1,2,3,4][b*c]*d","((a * ([1, 2, 3, 4][(b * c)])) * d)"),
-        ("add( a* b[2], b[1], 2 * [1,2][1])","add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))"),
+        ("a * [1,2,3,4][b*c]*d", "((a * ([1, 2, 3, 4][(b * c)])) * d)"),
+        ("add( a* b[2], b[1], 2 * [1,2][1])", "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))"),
     ];
 
     for (input, expected) in tests {
@@ -392,11 +392,11 @@ fn test_string_literal_expression() {
             expression: Expression::STRING_LITERAL(_, s)
         }) = stmt {
         assert_eq!(s, "hello world");
-    }else { assert!(false) }
+    } else { assert!(false) }
 }
 
 #[test]
-fn test_parsing_array_literals(){
+fn test_parsing_array_literals() {
     let input = "[1, 2 * 2, 3 + 3]";
     let lexer = Lexer::new(input).unwrap();
     let mut parser = Parser::new(lexer);
@@ -408,19 +408,16 @@ fn test_parsing_array_literals(){
 
     assert_eq!(program.statements.len(), 1);
 
-    if let Statement::EXPRESSION(ExpressionStatement{token: _, expression: Expression::ARRAY_LITERAL(_, expressions)}) = &program.statements[0] {
+    if let Statement::EXPRESSION(ExpressionStatement { token: _, expression: Expression::ARRAY_LITERAL(_, expressions) }) = &program.statements[0] {
         assert_eq!(expressions.len(), 3);
         assert_eq!("1", format!("{}", &expressions[0]));
         assert_eq!("(2 * 2)", format!("{}", &expressions[1]));
         assert_eq!("(3 + 3)", format!("{}", &expressions[2]));
-    }else { assert!(false) }
-
-
-
+    } else { assert!(false) }
 }
 
 #[test]
-fn test_parsing_index_expression(){
+fn test_parsing_index_expression() {
     let input = "myArray[1 + 1]";
     let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer.unwrap());
@@ -433,10 +430,66 @@ fn test_parsing_index_expression(){
     assert_eq!(program.statements.len(), 1);
 
     if let Statement::EXPRESSION(
-        ExpressionStatement{token: _, expression:
-        Expression::INDEX_EXPRESSION(_, left, idx)}) = &program.statements[0] {
+        ExpressionStatement {
+            token: _, expression:
+        Expression::INDEX_EXPRESSION(_, left, idx)
+        }) = &program.statements[0] {
         assert_eq!("myArray", format!("{}", left));
         assert_eq!("(1 + 1)", format!("{}", idx));
     }
+}
 
+#[test]
+fn test_parsing_hash_literals() {
+    let input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
+    let lexer = Lexer::new(input).unwrap();
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+
+    if !program.is_ok(){
+        eprintln!("{:?}", program);
+        assert!(false);
+    }
+
+    let program = program.unwrap();
+    assert_eq!(program.statements.len(), 1);
+
+    let exp_keys = vec!["\"one\"", "\"two\"", "\"three\""];
+    let exp_vals = vec![1, 2, 3];
+
+    if let Statement::EXPRESSION(
+        ExpressionStatement {
+            token: _, expression:
+        Expression::HASH_LITERAL(_, keys, vals)
+        }) = &program.statements[0] {
+        assert_eq!(keys.len(), 3);
+        assert_eq!(vals.len(), 3);
+        for (((k, v), ek), ev) in keys.iter().zip(vals).zip(exp_keys).zip(exp_vals) {
+            assert_eq!(format!("{}", k), ek);
+            assert_eq!(format!("{}", v), format!("{}", ev));
+        }
+    } else { assert!(false); }
+}
+
+#[test]
+fn test_parsing_empty_hash_literal() {
+    let input = "{}";
+    let lexer = Lexer::new(input).unwrap();
+    let mut parser = Parser::new(lexer);
+    let program = parser.parse_program();
+
+    if !program.is_ok(){
+        eprintln!("{:?}", program);
+        assert!(false);
+    }
+
+    let program = program.unwrap();
+    assert_eq!(program.statements.len(), 1);
+
+    if let Statement::EXPRESSION(
+        ExpressionStatement { token: _, expression: 
+        Expression::HASH_LITERAL(_, k, v) }) = &program.statements[0] {
+        assert_eq!(k.len(), 0);
+        assert_eq!(v.len(), 0);
+    } else { assert!(false); }
 }

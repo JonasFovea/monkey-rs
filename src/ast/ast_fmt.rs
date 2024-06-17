@@ -46,8 +46,15 @@ impl fmt::Display for Expression {
                 let concated = elems.iter().map(|e| format!("{}", e))
                     .collect::<Vec<String>>().join(", ");
                 write!(f, "[{}]", concated)
-            },
-            Expression::INDEX_EXPRESSION(_, left, idx) => {write!(f, "({}[{}])", left, idx)}
+            }
+            Expression::INDEX_EXPRESSION(_, left, idx) => { write!(f, "({}[{}])", left, idx) }
+            Expression::HASH_LITERAL(_, keys, values) => {
+                let out = keys.iter().zip(values)
+                    .map(|(k, v)| format!("{}: {}", k, v))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "{{{}}}", out)
+            }
         }
     }
 }

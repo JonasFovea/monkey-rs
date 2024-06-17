@@ -18,6 +18,7 @@ pub enum Object {
     Null,
     Builtin(String),
     Array(Vec<Object>),
+    Hash(HashMap<HashKey, Object>),
 }
 
 impl Object {
@@ -31,6 +32,7 @@ impl Object {
             Object::Boolean(_) => "Boolean",
             Object::Return(_) => "Return",
             Object::Array(_) => "Array",
+            Object::Hash(_) => "Hash",
         }.to_string()
     }
 }
@@ -67,6 +69,11 @@ impl PartialEq for Object {
                 if let Object::Array(b) = other {
                     a == b
                 } else { false }
+            },
+            Object::Hash(a) => {
+                if let Object::Hash(b) = other {
+                    a == b
+                }else { false }
             }
         }
     }
@@ -93,6 +100,13 @@ impl fmt::Display for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
+            },
+            Object::Hash(map) => {
+                format!("{{{}}}", map
+                    .iter()
+                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .collect::<Vec<String>>()
+                    .join(", "))
             }
         };
         write!(f, "{}", formatted)
@@ -118,6 +132,13 @@ impl fmt::Debug for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
+            },
+            Object::Hash(map) => {
+                format!("Hash {{ Elements: {{{:?}}}}}", map
+                    .iter()
+                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .collect::<Vec<String>>()
+                    .join(", "))
             }
         };
         write!(f, "{}", formatted)
@@ -212,6 +233,7 @@ pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -
         "first" => Ok(Box::new(first)),
         "rest" => Ok(Box::new(rest)),
         "push" => Ok(Box::new(push)),
+        "puts" => Ok(Box::new(puts)),
         f => bail!("Builtin function {} unknown!", f)
     }
 }
@@ -227,22 +249,22 @@ fn len(args: Vec<Object>) -> Result<Object> {
     }
 }
 
-fn first(args: Vec<Object>) -> Result<Object>{
+fn first(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
         bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
     }
     match &args[0] {
-        Object::Array(a) => { 
+        Object::Array(a) => {
             if a.len() < 1 {
                 return Ok(Object::Null);
             }
-            Ok(a[0].clone()) 
-        },
+            Ok(a[0].clone())
+        }
         a => bail!("Invalid argument of type: {}", a.type_str())
     }
 }
 
-fn rest(args: Vec<Object>) -> Result<Object>{
+fn rest(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
         bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
     }
@@ -251,8 +273,8 @@ fn rest(args: Vec<Object>) -> Result<Object>{
             if a.len() < 2 {
                 return Ok(Object::Null);
             }
-            Ok(Object::Array(a[1..].iter().map(|e|e.clone()).collect()))
-        },
+            Ok(Object::Array(a[1..].iter().map(|e| e.clone()).collect()))
+        }
         a => bail!("Invalid argument of type: {}", a.type_str())
     }
 }
@@ -266,8 +288,44 @@ fn push(args: Vec<Object>) -> Result<Object> {
             let mut new_arr = a.clone();
             new_arr.push(b.clone());
             Ok(Object::Array(new_arr))
-        },
+        }
         (a, b) => bail!("Invalid arguments of type: {}, {}", a.type_str(), b.type_str())
     }
 }
 
+fn puts(args: Vec<Object>) -> Result<Object>{
+    for arg in args{
+        println!("{arg}");
+    }
+    Ok(Object::Null)
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum HashKey {
+    INT(i64),
+    STRING(String),
+    BOOL(bool),
+}
+
+impl HashKey {
+    pub fn from_object(obj: &Object) -> Result<Self> {
+        match obj {
+            Object::String(s) => Ok(HashKey::STRING(s.clone())),
+            Object::Integer(i) => Ok(HashKey::INT(*i)),
+            Object::Boolean(b) => Ok(HashKey::BOOL(*b)),
+            o => { 
+                bail!("Object of type {} is not hashable! Supported types: Integer, String, Boolean.", o.type_str()); 
+            }
+        }
+    }
+}
+
+impl fmt::Display for HashKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self { 
+            HashKey::STRING(s) => format!("{}", s),
+            HashKey::INT(i) => format!("{}", i),
+            HashKey::BOOL(b) => format!("{}", b)
+        })
+    }
+}
