@@ -231,6 +231,7 @@ pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -
     match func_name {
         "len" => Ok(Box::new(len)),
         "first" => Ok(Box::new(first)),
+        "last" => Ok(Box::new(last)),
         "rest" => Ok(Box::new(rest)),
         "push" => Ok(Box::new(push)),
         "puts" => Ok(Box::new(puts)),
@@ -259,6 +260,21 @@ fn first(args: Vec<Object>) -> Result<Object> {
                 return Ok(Object::Null);
             }
             Ok(a[0].clone())
+        }
+        a => bail!("Invalid argument of type: {}", a.type_str())
+    }
+}
+
+fn last(args: Vec<Object>) -> Result<Object>{
+    if args.len() != 1 {
+        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+    }
+    match &args[0] {
+        Object::Array(a) => {
+            if a.len() < 1 {
+                return Ok(Object::Null);
+            }
+            Ok(a[a.len()-1].clone())
         }
         a => bail!("Invalid argument of type: {}", a.type_str())
     }
