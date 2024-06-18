@@ -13,7 +13,8 @@ use crate::object::{Environment, Object};
 pub fn start() {
     let env = Rc::new(Mutex::new(Environment::new()));
 
-    println!("Hello {}, welcome to the monkey-rs repl!", whoami::username());
+    println!("Hello {}, welcome to the monkey-rs repl!\
+    \nFeel free to type any Monkey statements following the '>>'-prompt.\n", whoami::username());
     loop {
         let mut input = String::new();
         print!(">> ");
