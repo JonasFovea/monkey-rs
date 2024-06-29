@@ -16,6 +16,9 @@ mod repl;
 mod ast;
 mod object;
 mod evaluator;
+mod code;
+mod compiler;
+mod vm;
 
 struct Options {
     filename: String,
@@ -40,7 +43,7 @@ fn main() {
         .add_option(
             &["-c", "--compile"],
             StoreFalse,
-            "Flag for future usage of the Monkey-rs compiler. Currently UNUSED!",
+            "Flag for usage of the Monkey-rs compiler.",
         );
 
     ap.parse_args_or_exit();
@@ -49,7 +52,11 @@ fn main() {
     if opts.filename.len() > 0 {
         interpret_file(&opts.filename);
     } else {
-        repl::start();
+        if opts.use_interpreter {
+            repl::start_interpreted_repl();
+        }else { 
+            repl::start_compiled_repl();
+        }
     }
 }
 
