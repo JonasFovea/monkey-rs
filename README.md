@@ -98,7 +98,7 @@ Bar
 5
 ```
 
-## Using the interpreter interactively
+## Executing Monkey interactively
 Simply clone this repo and execute it using [cargo](https://www.rust-lang.org/learn/get-started):
 ```bash
 cargo run
@@ -111,6 +111,9 @@ cargo build --release
 
 You will start in an interactive shell, ready to interpret some _Monkey_ code!
 
+To use the compiler and vm to execute _Monkey_ code, add the `-c` or `--compile` flag. 
+**Note, that in this state of the project, the compiler is NOT yet feature complete!**
+
 ## Interpreting a Monkey file
 Executing Monkey-rs, you can also specify a file (using either the -f or --file flag), which contains _Monkey_ code.
 The file is then lexed, parsed and evaluated.
@@ -122,3 +125,5 @@ cargo run -- -f ./examples/hello_world.mky
 cargo build --release
 ./target/release/monkey-rs -f ./examples/hello_world.mky
 ```
+
+**The compile flags currently have NO EFFECT on the execution of files!**
