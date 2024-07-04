@@ -34,6 +34,7 @@ impl Compiler {
             Statement::EXPRESSION(ExpressionStatement { token: _tok, expression: exp }) => {
                 self.compile_expression(&exp)
                     .context("Compiling ExpressionStatement expression.")?;
+                self.emit(Opcode::OpPop, vec![])?;
             }
             _ => todo!("Statement can't yet be compiled.")
         }
@@ -44,6 +45,28 @@ impl Compiler {
     fn compile_expression(&mut self, expression: &Expression) -> Result<()> {
         match expression {
             Expression::INFIX(a, op, b) => {
+                match op.token_type {
+                    TokenType::LT => {
+                        self.compile_expression(b)
+                            .context("Compiling first (switched) operand of infix expression.")?;
+                        self.compile_expression(a)
+                            .context("Compiling second (switched) operand of infix expression.")?;
+                        self.emit(Opcode::OpGreaterThan, vec![])
+                            .context("Emitting OpGreaterThan for (switched) infix expression.")?;
+                        return Ok(());
+                    }
+                    TokenType::LEQ => {
+                        self.compile_expression(b)
+                            .context("Compiling first (switched) operand of infix expression.")?;
+                        self.compile_expression(a)
+                            .context("Compiling second (switched) operand of infix expression.")?;
+                        self.emit(Opcode::OpGreaterEquals, vec![])
+                            .context("Emitting OpGreaterEquals for (switched) infix expression.")?;
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+
                 self.compile_expression(a)
                     .context("Compiling first operand of infix expression.")?;
                 self.compile_expression(b)
@@ -54,6 +77,34 @@ impl Compiler {
                         self.emit(Opcode::OpAdd, vec![])
                             .context("Emitting OpAdd for infix expression.")?;
                     }
+                    TokenType::MINUS => {
+                        self.emit(Opcode::OpSub, vec![])
+                            .context("Emitting OpSub for infix expression.")?;
+                    }
+                    TokenType::ASTERISK => {
+                        self.emit(Opcode::OpMul, vec![])
+                            .context("Emitting OpMul for infix expression.")?;
+                    }
+                    TokenType::SLASH => {
+                        self.emit(Opcode::OpDiv, vec![])
+                            .context("Emitting OpDiv for infix expression.")?;
+                    }
+                    TokenType::GT => {
+                        self.emit(Opcode::OpGreaterThan, vec![])
+                            .context("Emitting OpGreaterThan for infix expression.")?;
+                    }
+                    TokenType::EQ => {
+                        self.emit(Opcode::OpEqual, vec![])
+                            .context("Emitting OpEqual for infix expression.")?;
+                    }
+                    TokenType::NEQ => {
+                        self.emit(Opcode::OpNotEqual, vec![])
+                            .context("Emitting OpNotEqual for infix expression.")?;
+                    },
+                    TokenType::GEQ => {
+                        self.emit(Opcode::OpGreaterEquals, vec![])
+                            .context("Emitting OpGreaterEquals for infix expression.")?;
+                    }
                     _ => bail!("Unknown operator {}", op)
                 }
             }
@@ -62,6 +113,24 @@ impl Compiler {
                 let const_pos = self.add_constant(int) as u16;
                 self.emit(Opcode::OpConstant, vec![const_pos])
                     .context("Emitting code for integer literal.")?;
+            }
+            Expression::BOOL_LITERAL(_, b) => {
+                if *b {
+                    self.emit(Opcode::OpTrue, vec![])?;
+                } else {
+                    self.emit(Opcode::OpFalse, vec![])?;
+                }
+            }
+            Expression::PREFIX(op, e) => {
+                self.compile_expression(e)
+                    .context("Compiling inner expression of prefix expression.")?;
+                match op.token_type { 
+                    TokenType::BANG => self.emit(Opcode::OpBang, vec![])
+                        .context("Emitting prefix bang operator.")?,
+                    TokenType::MINUS => self.emit(Opcode::OpMinus, vec![])
+                        .context("Emitting prefix minus operator.")?,
+                    _ => bail!("Unknown prefix operator: {:?}", op.token_type)
+                };
             }
             _ => todo!("Expression can't yet be compiled.")
         }

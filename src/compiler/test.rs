@@ -10,6 +10,23 @@ struct CompilerTestCase {
     expected_instructions: Vec<Instructions>,
 }
 
+
+#[test]
+fn test_read_operands() {
+    let tests = vec![(Opcode::OpConstant, vec![65535], 2)];
+
+    for (op, operands, bytes_read) in tests {
+        let instruction = make(op, operands.clone()).unwrap();
+        let def = lookup(op.into()).unwrap();
+
+        let (operands_read, n) = read_operands(def, Instructions(instruction.0[1..].to_vec()));
+        assert_eq!(bytes_read, n);
+
+        for (e, a) in operands.iter().zip(operands_read) {
+            assert_eq!(*e, a);
+        }
+    }
+}
 #[test]
 fn test_integer_arithmetic() {
     let tests = vec![
@@ -20,9 +37,174 @@ fn test_integer_arithmetic() {
             vec![
                 make(Opcode::OpConstant, vec![0]).unwrap(),
                 make(Opcode::OpConstant, vec![1]).unwrap(),
-                make(Opcode::OpAdd, vec![]).unwrap()
+                make(Opcode::OpAdd, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
             ],
-        }
+        },
+        CompilerTestCase {
+            input: "1; 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 - 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions:
+            vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpSub, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 * 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions:
+            vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpMul, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "2 / 1".to_string(),
+            expected_constants: vec![Object::Integer(2), Object::Integer(1)],
+            expected_instructions:
+            vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpDiv, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase{
+            input: "-1".to_string(),
+            expected_constants: vec![Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpMinus, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        },
+    ];
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_boolean_expressions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "true;".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "false;".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpFalse, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 > 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpGreaterThan, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 < 2".to_string(),
+            expected_constants: vec![Object::Integer(2), Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpGreaterThan, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 == 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpEqual, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 != 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpNotEqual, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 >= 2".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpGreaterEquals, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "1 <= 2".to_string(),
+            expected_constants: vec![Object::Integer(2), Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpGreaterEquals, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "true == false".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                make(Opcode::OpFalse, vec![]).unwrap(),
+                make(Opcode::OpEqual, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "true != false".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                make(Opcode::OpFalse, vec![]).unwrap(),
+                make(Opcode::OpNotEqual, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase{
+            input: "!true".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                make(Opcode::OpBang, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        },
     ];
     run_compiler_tests(tests);
 }
@@ -85,20 +267,3 @@ fn test_constants(expected: Vec<Object>, actual: Vec<Object>) {
     }
 }
 
-
-#[test]
-fn test_read_operands() {
-    let tests = vec![(Opcode::OpConstant, vec![65535], 2)];
-
-    for (op, operands, bytes_read) in tests {
-        let instruction = make(op, operands.clone()).unwrap();
-        let def = lookup(op.into()).unwrap();
-
-        let (operands_read, n) = read_operands(def, Instructions(instruction.0[1..].to_vec()));
-        assert_eq!(bytes_read, n);
-
-        for (e, a) in operands.iter().zip(operands_read) {
-            assert_eq!(*e, a);
-        }
-    }
-}

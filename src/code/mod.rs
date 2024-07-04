@@ -1,4 +1,5 @@
 use std::ops::Index;
+
 use anyhow::{bail, Context, Result};
 
 mod test;
@@ -53,8 +54,8 @@ impl Instructions {
         if operands.len() != operand_count {
             return format!("ERROR: operand len {} does not match defined {}\n", operands.len(), operand_count);
         }
-        
-        return 
+
+        return
         match operand_count {
             0 => format!("{}", definition.name),
             1 => format!("{} {}", definition.name, operands[0]),
@@ -63,7 +64,7 @@ impl Instructions {
     }
 }
 
-impl Index<usize> for Instructions{
+impl Index<usize> for Instructions {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -75,6 +76,18 @@ impl Index<usize> for Instructions{
 pub enum Opcode {
     OpConstant,
     OpAdd,
+    OpPop,
+    OpSub,
+    OpDiv,
+    OpMul,
+    OpTrue,
+    OpFalse,
+    OpEqual,
+    OpNotEqual,
+    OpGreaterThan,
+    OpGreaterEquals,
+    OpMinus,
+    OpBang,
 }
 
 impl Into<u8> for Opcode {
@@ -82,6 +95,18 @@ impl Into<u8> for Opcode {
         match self {
             Opcode::OpConstant => 1,
             Opcode::OpAdd => 2,
+            Opcode::OpPop => 3,
+            Opcode::OpSub => 4,
+            Opcode::OpDiv => 5,
+            Opcode::OpMul => 6,
+            Opcode::OpTrue => 7,
+            Opcode::OpFalse => 8,
+            Opcode::OpEqual => 9,
+            Opcode::OpNotEqual => 10,
+            Opcode::OpGreaterThan => 11,
+            Opcode:: OpGreaterEquals => 12,
+            Opcode::OpMinus => 13,
+            Opcode::OpBang => 14,
         }
     }
 }
@@ -93,10 +118,58 @@ impl Into<Definition> for Opcode {
                 name: "OpConstant".to_string(),
                 operand_widths: vec![2],
             },
-            Opcode::OpAdd => Definition{
+            Opcode::OpAdd => Definition {
                 name: "OpAdd".to_string(),
                 operand_widths: vec![],
-            }
+            },
+            Opcode::OpPop => Definition {
+                name: "OpPop".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpSub => Definition {
+                name: "OpSub".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpDiv => Definition {
+                name: "OpDiv".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpMul => Definition {
+                name: "OpMul".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpTrue => Definition {
+                name: "OpTrue".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpFalse => Definition {
+                name: "OpFalse".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpEqual => Definition{
+                name: "OpEqual".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpNotEqual => Definition{
+                name: "OpNotEqual".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpGreaterThan => Definition{
+                name: "OpGreaterThan".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpGreaterEquals => Definition{
+                name: "OpGreaterEquals".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpMinus => Definition{
+                name: "OpMinus".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpBang => Definition{
+                name: "OpBang".to_string(),
+                operand_widths: vec![],
+            },
         }
     }
 }
@@ -108,6 +181,18 @@ impl TryFrom<u8> for Opcode {
         match value {
             1 => Ok(Opcode::OpConstant),
             2 => Ok(Opcode::OpAdd),
+            3 => Ok(Opcode::OpPop),
+            4 => Ok(Opcode::OpSub),
+            5 => Ok(Opcode::OpDiv),
+            6 => Ok(Opcode::OpMul),
+            7 => Ok(Opcode::OpTrue),
+            8 => Ok(Opcode::OpFalse),
+            9 => Ok(Opcode::OpEqual),
+            10 => Ok(Opcode::OpNotEqual),
+            11 => Ok(Opcode::OpGreaterThan),
+            12 => Ok(Opcode::OpGreaterEquals),
+            13 => Ok(Opcode::OpMinus),
+            14 => Ok(Opcode::OpBang),
             _ => bail!("opcode {} undefined", value),
         }
     }
@@ -165,6 +250,6 @@ pub fn read_operands(definition: Definition, instructions: Instructions) -> (Vec
     (operands, offset)
 }
 
-pub(crate) fn read_uint16(bytes: &[u8])-> u16{
+pub(crate) fn read_uint16(bytes: &[u8]) -> u16 {
     u16::from_be_bytes([bytes[0], bytes[1]])
 }

@@ -57,8 +57,6 @@ pub fn start_interpreted_repl() {
 }
 
 pub fn start_compiled_repl() {
-    let env = Rc::new(Mutex::new(Environment::new()));
-
     println!("Hello {}, welcome to the compiled monkey-rs repl!\
     \nFeel free to type any Monkey statements following the '>>'-prompt.\n", whoami::username());
     loop {
@@ -97,7 +95,7 @@ pub fn start_compiled_repl() {
                     }
                     continue;
                 }
-                let stack_top = machine.stack_top();
+                let stack_top = machine.last_popped_stack_elem();
                 if let Err(e) = stack_top {
                     eprintln!("Unable to pop top stack element:");
                     for (i, cause) in e.chain().enumerate() {
