@@ -27,6 +27,7 @@ fn test_read_operands() {
         }
     }
 }
+
 #[test]
 fn test_integer_arithmetic() {
     let tests = vec![
@@ -84,14 +85,14 @@ fn test_integer_arithmetic() {
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
-        CompilerTestCase{
+        CompilerTestCase {
             input: "-1".to_string(),
             expected_constants: vec![Object::Integer(1)],
             expected_instructions: vec![
                 make(Opcode::OpConstant, vec![0]).unwrap(),
                 make(Opcode::OpMinus, vec![]).unwrap(),
-                make(Opcode::OpPop, vec![]).unwrap()
-            ]
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
         },
     ];
     run_compiler_tests(tests);
@@ -196,16 +197,68 @@ fn test_boolean_expressions() {
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
-        CompilerTestCase{
+        CompilerTestCase {
             input: "!true".to_string(),
             expected_constants: vec![],
             expected_instructions: vec![
                 make(Opcode::OpTrue, vec![]).unwrap(),
                 make(Opcode::OpBang, vec![]).unwrap(),
-                make(Opcode::OpPop, vec![]).unwrap()
-            ]
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
         },
     ];
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_conditionals() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "if (true) { 10 }; 3333;".to_string(),
+            expected_constants: vec![Object::Integer(10), Object::Integer(3333)],
+            expected_instructions: vec![
+                //0000
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                //0001
+                make(Opcode::OpJumpNotTruthy, vec![10]).unwrap(),
+                //0004
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                //0007
+                make(Opcode::OpJump, vec![11]).unwrap(),
+                //0010
+                make(Opcode::OpNull, vec![]).unwrap(),
+                //0011
+                make(Opcode::OpPop, vec![]).unwrap(),
+                //0012
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                //0015
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase{
+            input: "if (true) {10} else {20}; 3333;".to_string(),
+            expected_constants: vec![Object::Integer(10), Object::Integer(20), Object::Integer(3333)],
+            expected_instructions: vec![
+                //0000
+                make(Opcode::OpTrue, vec![]).unwrap(),
+                //0001
+                make(Opcode::OpJumpNotTruthy, vec![10]).unwrap(),
+                //0004
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                //0007
+                make(Opcode::OpJump, vec![13]).unwrap(),
+                //0010
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                //0013
+                make(Opcode::OpPop, vec![]).unwrap(),
+                //0014
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                //0017
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        }
+    ];
+
     run_compiler_tests(tests);
 }
 
@@ -249,8 +302,8 @@ fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
                "Wrong instruction length.\nwant={:?}\n got={:?}",
                &concatted.to_string(), &actual.to_string());
 
-    for (e, a) in concatted.0.iter().zip(actual.0) {
-        assert_eq!(*e, a);
+    for (i,(e, a)) in concatted.0.iter().zip(actual.0).enumerate() {
+        assert_eq!(*e, a, "Instruction {i} does not match!\nwant={}\n got={}", e, a);
     }
 }
 

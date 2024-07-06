@@ -57,8 +57,11 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
         let mut vm = VM::new(comp.bytecode().unwrap());
         // println!("{:?}", &vm);
         let run_err = vm.run();
-        if run_err.is_err() {
-            assert!(false, "Running bytecode failed!\n{:?}", run_err);
+        if let Err(e) = run_err {
+            for (i, cause) in e.chain().enumerate() {
+                eprintln!("\t{i}: {cause}");
+            }
+            assert!(false, "Running bytecode failed!\n{:?}", e);
         }
         let stack_elem = vm.last_popped_stack_elem();
         if stack_elem.is_err() {
@@ -74,6 +77,7 @@ fn test_expected_object(expected: &Object, actual: &Object) {
     match expected {
         Object::Integer(i) => test_integer_object(*i, actual),
         Object::Boolean(b) => test_boolean_object(*b, actual),
+        Object::Null => assert_eq!(expected, actual),
         _ => todo!("Test case not implemented.")
     }
 }
@@ -135,6 +139,55 @@ fn test_boolean_expressions() {
         VMTestCase::new_bool_result_case("!!true", true),
         VMTestCase::new_bool_result_case("!!false", false),
         VMTestCase::new_bool_result_case("!!5", true),
+        VMTestCase::new_bool_result_case("!if(false){5;}", true),
     ];
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_conditionals() {
+    let tests = vec![
+        VMTestCase {
+            input: "if (true) { 10 }".to_string(),
+            expected: Object::Integer(10),
+        },
+        VMTestCase {
+            input: "if (true) { 10 } else { 20 }".to_string(),
+            expected: Object::Integer(10),
+        },
+        VMTestCase {
+            input: "if (false) { 10 } else { 20 }".to_string(),
+            expected: Object::Integer(20),
+        },
+        VMTestCase {
+            input: "if (1) { 10 }".to_string(),
+            expected: Object::Integer(10),
+        },
+        VMTestCase {
+            input: "if (1 < 2) { 10 }".to_string(),
+            expected: Object::Integer(10),
+        },
+        VMTestCase {
+            input: "if (1 < 2) { 10 } else { 20 }".to_string(),
+            expected: Object::Integer(10),
+        },
+        VMTestCase {
+            input: "if (1 > 2) { 10 } else { 20 }".to_string(),
+            expected: Object::Integer(20),
+        },
+        VMTestCase {
+            input: "if (1 > 2) { 10 }".to_string(),
+            expected: Object::Null,
+        },
+        VMTestCase {
+            input: "if (false) { 10 }".to_string(),
+            expected: Object::Null,
+        },
+        VMTestCase{
+            input: "if (( if (false) { 10 })) { 10 } else { 20 }".to_string(),
+            expected: Object::Integer(20)
+        }
+    ];
+
     run_vm_tests(tests);
 }

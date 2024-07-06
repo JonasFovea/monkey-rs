@@ -35,6 +35,14 @@ impl Object {
             Object::Hash(_) => "Hash",
         }.to_string()
     }
+
+    pub(crate) fn is_truthy(&self) -> bool{
+        match self {
+            Object::Boolean(b) => *b,
+            Object::Null => false,
+            _ => true
+        }
+    }
 }
 
 impl PartialEq for Object {

@@ -11,6 +11,8 @@ mod test;
 pub struct Compiler {
     instructions: Instructions,
     constants: Vec<Object>,
+    last_instruction: Option<EmittedInstruction>,
+    previous_instruction: Option<EmittedInstruction>,
 }
 
 impl Compiler {
@@ -18,13 +20,21 @@ impl Compiler {
         Compiler {
             instructions: Instructions::new(),
             constants: Vec::new(),
+            last_instruction: None,
+            previous_instruction: None,
         }
     }
 
     pub fn compile_program(&mut self, program: &Program) -> Result<()> {
-        for stmt in &program.statements {
+        self.compile_block(&program.statements)
+            .context("Compiling program statements.")?;
+        Ok(())
+    }
+
+    fn compile_block(&mut self, block: &Vec<Statement>) -> Result<()> {
+        for stmt in block {
             self.compile_statement(stmt)
-                .context("Compiling program statement.")?;
+                .context("Compiling statement.")?;
         }
         Ok(())
     }
@@ -36,7 +46,7 @@ impl Compiler {
                     .context("Compiling ExpressionStatement expression.")?;
                 self.emit(Opcode::OpPop, vec![])?;
             }
-            _ => todo!("Statement can't yet be compiled.")
+            _ => bail!("Statement {:?} can't yet be compiled.", statement)
         }
 
         Ok(())
@@ -100,7 +110,7 @@ impl Compiler {
                     TokenType::NEQ => {
                         self.emit(Opcode::OpNotEqual, vec![])
                             .context("Emitting OpNotEqual for infix expression.")?;
-                    },
+                    }
                     TokenType::GEQ => {
                         self.emit(Opcode::OpGreaterEquals, vec![])
                             .context("Emitting OpGreaterEquals for infix expression.")?;
@@ -116,15 +126,17 @@ impl Compiler {
             }
             Expression::BOOL_LITERAL(_, b) => {
                 if *b {
-                    self.emit(Opcode::OpTrue, vec![])?;
+                    self.emit(Opcode::OpTrue, vec![])
+                        .context("Emitting boolean literal true.")?;
                 } else {
-                    self.emit(Opcode::OpFalse, vec![])?;
+                    self.emit(Opcode::OpFalse, vec![])
+                        .context("Emitting boolean literal false.")?;
                 }
             }
             Expression::PREFIX(op, e) => {
                 self.compile_expression(e)
                     .context("Compiling inner expression of prefix expression.")?;
-                match op.token_type { 
+                match op.token_type {
                     TokenType::BANG => self.emit(Opcode::OpBang, vec![])
                         .context("Emitting prefix bang operator.")?,
                     TokenType::MINUS => self.emit(Opcode::OpMinus, vec![])
@@ -132,7 +144,49 @@ impl Compiler {
                     _ => bail!("Unknown prefix operator: {:?}", op.token_type)
                 };
             }
-            _ => todo!("Expression can't yet be compiled.")
+            Expression::IF_EXPRESSION(_, condition, consequence, alternative) => {
+                self.compile_expression(condition)
+                    .context("Compiling condition of if expression")?;
+
+                let jump_not_truthy_pos = self.emit(Opcode::OpJumpNotTruthy, vec![9999])
+                    .context("Emitting conditional jump with placeholder address.")?;
+
+                self.compile_block(&consequence.statements)
+                    .context("Compiling consequence block.")?;
+
+                if self.last_instruction_is_pop() {
+                    self.remove_last_pop();
+                }
+
+                let jump_pos = self.emit(Opcode::OpJump, vec![9999])
+                    .context("Emitting jump instruction after conditional consequence with placeholder address.")?;
+
+                let after_consequence_pos = self.instructions.len();
+                self.change_operand(jump_not_truthy_pos, vec![after_consequence_pos as u16])
+                    .context("Swapping jump address of conditional.")?;
+
+                if let Some(alt) = alternative {
+
+                    self.compile_block(&alt.statements)
+                        .context("Compiling alternative of conditional.")?;
+
+                    if self.last_instruction_is_pop() {
+                        self.remove_last_pop();
+                    }
+
+
+                }else {
+                    self.emit(Opcode::OpNull, vec![])
+                        .context("Emitting OpNull for empty alternative of conditional.")?;
+                }
+
+                let after_alternative_pos = self.instructions.len();
+
+                self.change_operand(jump_pos, vec![after_alternative_pos as u16])
+                    .context("Swapping jump address after conditional consequence.")?;
+
+            }
+            _ => bail!("Expression {:?} can't yet be compiled.", expression)
         }
 
         Ok(())
@@ -154,7 +208,57 @@ impl Compiler {
     fn emit(&mut self, op: Opcode, operands: Vec<u16>) -> Result<usize> {
         let ins = make(op, operands)
             .context("Building instruction to emit.")?;
-        return Ok(self.add_instruction(ins.0));
+        let pos = self.add_instruction(ins.0);
+
+        self.set_last_instruction(op, pos);
+
+        return Ok(pos);
+    }
+
+    fn set_last_instruction(&mut self, opcode: Opcode, position: usize) {
+        self.previous_instruction = self.last_instruction;
+        self.last_instruction = Some(EmittedInstruction {
+            opcode,
+            position,
+        });
+    }
+
+    fn last_instruction_is_pop(&self) -> bool {
+        if let Some(ins) = self.last_instruction {
+            return ins.opcode == Opcode::OpPop;
+        }
+        false
+    }
+
+    fn remove_last_pop(&mut self) {
+        let new_len = if let Some(ins) = self.last_instruction {
+            ins.position
+        } else { 0 };
+
+        self.instructions.0.resize(new_len, 0);
+
+        self.last_instruction = self.previous_instruction;
+        self.previous_instruction = None;
+    }
+
+
+    fn replace_instruction(&mut self, pos: usize, instructions: Instructions) {
+        for (i, repl) in instructions.0.iter().enumerate() {
+            self.instructions.0[pos + i] = *repl;
+        }
+    }
+
+    fn change_operand(&mut self, op_pos: usize, operands: Vec<u16>) -> Result<()> {
+        let op = Opcode::try_from(*self.instructions.0.get(op_pos)
+            .context("Retrieving opcode to change operand of.")?)
+            .context("Converting given instruction byte into opcode.")?;
+
+        let instruction = make(op, operands)
+            .context("Constructing new instruction with replaced operands.")?;
+
+        self.replace_instruction(op_pos, instruction);
+
+        Ok(())
     }
 
     pub(crate) fn bytecode(&self) -> Result<Bytecode> {
@@ -168,4 +272,10 @@ impl Compiler {
 pub(crate) struct Bytecode {
     pub(crate) instructions: Instructions,
     pub(crate) constants: Vec<Object>,
+}
+
+#[derive(Copy, Clone, Debug)]
+struct EmittedInstruction {
+    opcode: Opcode,
+    position: usize,
 }

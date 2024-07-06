@@ -58,7 +58,7 @@ impl VM {
                     self.execute_binary_operation(op)
                         .context("Executing binary operation.")?;
                 }
-                Opcode::OpPop => { self.pop()?; }
+                Opcode::OpPop => { self.pop().context("Executing OpPop.")?; }
                 Opcode::OpTrue => {
                     self.push(Object::Boolean(true))
                         .context("Pushing true onto the stack.")?;
@@ -78,6 +78,25 @@ impl VM {
                 Opcode::OpMinus => {
                     self.execute_minus_operator()
                         .context("Executing minus operator.")?;
+                }
+                Opcode::OpJump => {
+                    let pos = read_uint16(&self.instructions.0[ip + 1..]);
+
+                    ip = pos as usize - 1;
+                }
+                Opcode::OpJumpNotTruthy => {
+                    let pos = read_uint16(&self.instructions.0[ip + 1..]);
+                    ip += 2;
+
+                    let condition = self.pop()
+                        .context("Popping condition value.")?;
+                    if !condition.is_truthy() {
+                        ip = pos as usize - 1;
+                    }
+                }
+                Opcode::OpNull => {
+                    self.push(Object::Null)
+                        .context("Pushing Null onto the stack.")?;
                 }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
@@ -162,9 +181,11 @@ impl VM {
     }
 
     fn execute_bang_operator(&mut self) -> Result<()> {
-        let operand = self.pop().context("Popping bang operand.")?;
+        let operand = self.pop()
+            .context("Popping bang operand.")?;
         let result = match operand {
             Object::Boolean(b) => Object::Boolean(!b),
+            Object::Null => Object::Boolean(true),
             _ => Object::Boolean(false),
         };
 

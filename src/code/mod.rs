@@ -88,6 +88,9 @@ pub enum Opcode {
     OpGreaterEquals,
     OpMinus,
     OpBang,
+    OpJumpNotTruthy,
+    OpJump,
+    OpNull,
 }
 
 impl Into<u8> for Opcode {
@@ -107,6 +110,9 @@ impl Into<u8> for Opcode {
             Opcode:: OpGreaterEquals => 12,
             Opcode::OpMinus => 13,
             Opcode::OpBang => 14,
+            Opcode::OpJumpNotTruthy => 15,
+            Opcode::OpJump => 16,
+            Opcode::OpNull => 0,
         }
     }
 }
@@ -170,6 +176,18 @@ impl Into<Definition> for Opcode {
                 name: "OpBang".to_string(),
                 operand_widths: vec![],
             },
+            Opcode::OpJumpNotTruthy => Definition{
+                name: "OpJumpNotTruthy".to_string(),
+                operand_widths: vec![2]
+            },
+            Opcode::OpJump => Definition{
+                name: "OpJump".to_string(),
+                operand_widths: vec![2]
+            },
+            Opcode::OpNull => Definition{
+                name: "OpNull".to_string(),
+                operand_widths: vec![]
+            }
         }
     }
 }
@@ -193,6 +211,9 @@ impl TryFrom<u8> for Opcode {
             12 => Ok(Opcode::OpGreaterEquals),
             13 => Ok(Opcode::OpMinus),
             14 => Ok(Opcode::OpBang),
+            15 => Ok(Opcode::OpJumpNotTruthy),
+            16 => Ok(Opcode::OpJump),
+            0 => Ok(Opcode::OpNull),
             _ => bail!("opcode {} undefined", value),
         }
     }
