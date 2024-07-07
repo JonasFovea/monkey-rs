@@ -262,6 +262,46 @@ fn test_conditionals() {
     run_compiler_tests(tests);
 }
 
+#[test]
+fn test_global_let_statement(){
+    let tests = vec![
+      CompilerTestCase{
+          input: "let one = 1; let two = 2;".to_string(),
+          expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+          expected_instructions: vec![
+              make(Opcode::OpConstant, vec![0]).unwrap(),
+              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+              make(Opcode::OpConstant, vec![1]).unwrap(),
+              make(Opcode::OpSetGlobal, vec![1]).unwrap()
+          ]
+      }  ,
+      CompilerTestCase{
+          input: "let one = 1; one;".to_string(),
+          expected_constants: vec![Object::Integer(1)],
+          expected_instructions: vec![
+              make(Opcode::OpConstant, vec![0]).unwrap(),
+              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+              make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+              make(Opcode::OpPop, vec![]).unwrap()
+          ]
+      },
+      CompilerTestCase{
+          input: "let one = 1; let two = one; two;".to_string(),
+          expected_constants: vec![Object::Integer(1)],
+          expected_instructions: vec![
+              make(Opcode::OpConstant, vec![0]).unwrap(),
+              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+              make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+              make(Opcode::OpSetGlobal, vec![1]).unwrap(),
+              make(Opcode::OpGetGlobal, vec![1]).unwrap(),
+              make(Opcode::OpPop, vec![]).unwrap()
+          ]
+      }
+    ];
+    
+    run_compiler_tests(tests)
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
     for test in tests {
         let program = parse(&test.input);

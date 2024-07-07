@@ -1,11 +1,13 @@
 use anyhow::{bail, Context, Result};
 
-use crate::ast::{Expression, ExpressionStatement, Program, Statement};
+use crate::ast::{Expression, ExpressionStatement, LetStatement, Program, Statement};
 use crate::code::{Instructions, make, Opcode};
 use crate::object::Object;
 use crate::token::TokenType;
 
 mod test;
+mod symbol_table;
+mod test_symbol_table;
 
 #[derive(Debug, Clone)]
 pub struct Compiler {
@@ -45,6 +47,10 @@ impl Compiler {
                 self.compile_expression(&exp)
                     .context("Compiling ExpressionStatement expression.")?;
                 self.emit(Opcode::OpPop, vec![])?;
+            }
+            Statement::LET(LetStatement{token: _, value: exp, identifier: id}) => {
+                self.compile_expression(exp)
+                    .context("Compiling value of let statement.")?;
             }
             _ => bail!("Statement {:?} can't yet be compiled.", statement)
         }

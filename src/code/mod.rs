@@ -91,6 +91,8 @@ pub enum Opcode {
     OpJumpNotTruthy,
     OpJump,
     OpNull,
+    OpGetGlobal,
+    OpSetGlobal,
 }
 
 impl Into<u8> for Opcode {
@@ -113,6 +115,8 @@ impl Into<u8> for Opcode {
             Opcode::OpJumpNotTruthy => 15,
             Opcode::OpJump => 16,
             Opcode::OpNull => 0,
+            Opcode::OpGetGlobal => 17,
+            Opcode::OpSetGlobal => 18,
         }
     }
 }
@@ -187,6 +191,14 @@ impl Into<Definition> for Opcode {
             Opcode::OpNull => Definition{
                 name: "OpNull".to_string(),
                 operand_widths: vec![]
+            },
+            Opcode::OpGetGlobal => Definition{
+                name: "OpGetGlobal".to_string(),
+                operand_widths: vec![2]
+            },
+            Opcode::OpSetGlobal => Definition{
+                name: "OpSetGlobal".to_string(),
+                operand_widths: vec![2]
             }
         }
     }
@@ -214,6 +226,8 @@ impl TryFrom<u8> for Opcode {
             15 => Ok(Opcode::OpJumpNotTruthy),
             16 => Ok(Opcode::OpJump),
             0 => Ok(Opcode::OpNull),
+            17 => Ok(Opcode::OpGetGlobal),
+            18 => Ok(Opcode::OpSetGlobal),
             _ => bail!("opcode {} undefined", value),
         }
     }
