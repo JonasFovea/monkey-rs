@@ -9,7 +9,7 @@ pub(crate) enum Scope {
 pub(crate) struct Symbol {
     pub(crate) name: String,
     scope: Scope,
-    index: usize,
+    pub(crate) index: usize,
 }
 
 impl Symbol {
@@ -22,7 +22,7 @@ impl Symbol {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct SymbolTable {
     store: HashMap<String, Symbol>,
     num_definitions: usize,

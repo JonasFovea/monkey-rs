@@ -1,3 +1,6 @@
+use std::rc::Rc;
+use std::sync::Mutex;
+
 use anyhow::{bail, Context, Result};
 
 use crate::code::{Instructions, Opcode, read_uint16};
@@ -7,6 +10,7 @@ use crate::object::Object;
 mod test;
 
 const STACK_SIZE: usize = 2048;
+pub(crate) const GLOBALS_SIZE: usize = 65536;
 
 #[derive(Debug)]
 pub(crate) struct VM {
@@ -14,6 +18,7 @@ pub(crate) struct VM {
     instructions: Instructions,
     stack: [Object; STACK_SIZE],
     sp: usize,
+    globals: Rc<Mutex<Box<[Object]>>>,
 }
 
 impl VM {
@@ -26,6 +31,22 @@ impl VM {
                     instructions: ins,
                     stack: [NULL; STACK_SIZE],
                     sp: 0,
+                    globals: Rc::new(Mutex::new(vec![Object::Null; GLOBALS_SIZE].into_boxed_slice())),
+                }
+            }
+        }
+    }
+
+    pub fn with_global_store(bytecode: Bytecode, globals: Rc<Mutex<Box<[Object]>>>) -> Self {
+        const NULL: Object = Object::Null;
+        match bytecode {
+            Bytecode { instructions: ins, constants: cons } => {
+                VM {
+                    constants: cons,
+                    instructions: ins,
+                    stack: [NULL; STACK_SIZE],
+                    sp: 0,
+                    globals,
                 }
             }
         }
@@ -97,6 +118,24 @@ impl VM {
                 Opcode::OpNull => {
                     self.push(Object::Null)
                         .context("Pushing Null onto the stack.")?;
+                }
+                Opcode::OpSetGlobal => {
+                    let global_index = read_uint16(&self.instructions.0[ip + 1..]);
+                    ip += 2;
+
+                    self.globals
+                        .lock().expect("Failed to access globals.")
+                        [global_index as usize] = self.pop()
+                        .context("Popping element to store in globals.")?;
+                }
+                Opcode::OpGetGlobal => {
+                    let global_index = read_uint16(&self.instructions.0[ip + 1..]);
+                    ip += 2;
+                    let obj = self.globals
+                        .lock().expect("Failed to access globals.")
+                        [global_index as usize].clone();
+                    self.push(obj)
+                        .context("Pushing global object onto the stack.")?
                 }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }

@@ -8,10 +8,11 @@ use whoami;
 
 use crate::ast::Parser;
 use crate::compiler::Compiler;
+use crate::compiler::symbol_table::SymbolTable;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
 use crate::object::{Environment, Object};
-use crate::vm::VM;
+use crate::vm::{GLOBALS_SIZE, VM};
 
 pub fn start_interpreted_repl() {
     let env = Rc::new(Mutex::new(Environment::new()));
@@ -57,6 +58,11 @@ pub fn start_interpreted_repl() {
 }
 
 pub fn start_compiled_repl() {
+    let symbol_table = Rc::new(Mutex::new(SymbolTable::new()));
+    let constants = Rc::new(Mutex::new(Vec::new()));
+    const NULL: Object = Object::Null;
+    let globals = Rc::new(Mutex::new(vec![NULL; GLOBALS_SIZE].into_boxed_slice()));
+
     println!("Hello {}, welcome to the compiled monkey-rs repl!\
     \nFeel free to type any Monkey statements following the '>>'-prompt.\n", whoami::username());
     loop {
@@ -76,7 +82,7 @@ pub fn start_compiled_repl() {
                     continue;
                 }
                 let program = program.unwrap();
-                let mut comp = Compiler::new();
+                let mut comp = Compiler::with_state(symbol_table.clone(), constants.clone());
                 if let Err(e) = comp.compile_program(&program) {
                     eprintln!("Compilation failed:");
                     for (i, cause) in e.chain().enumerate() {
@@ -84,9 +90,10 @@ pub fn start_compiled_repl() {
                     }
                     continue;
                 }
-                let mut machine = VM::new(
+                let mut machine = VM::with_global_store(
                     comp.bytecode()
-                        .context("Turning compiled code into bytecode.").unwrap()
+                        .context("Turning compiled code into bytecode.").unwrap(),
+                    globals.clone()
                 );
                 if let Err(e) = machine.run() {
                     eprintln!("Executing bytecode failed:");

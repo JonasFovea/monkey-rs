@@ -1,29 +1,45 @@
+use std::rc::Rc;
+use std::sync::Mutex;
+
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{Expression, ExpressionStatement, LetStatement, Program, Statement};
 use crate::code::{Instructions, make, Opcode};
+use crate::compiler::symbol_table::SymbolTable;
 use crate::object::Object;
 use crate::token::TokenType;
 
 mod test;
-mod symbol_table;
+pub(crate) mod symbol_table;
 mod test_symbol_table;
 
 #[derive(Debug, Clone)]
 pub struct Compiler {
     instructions: Instructions,
-    constants: Vec<Object>,
+    constants: Rc<Mutex<Vec<Object>>>,
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
+    symbol_table: Rc<Mutex<SymbolTable>>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
             instructions: Instructions::new(),
-            constants: Vec::new(),
+            constants: Rc::new(Mutex::new(Vec::new())),
             last_instruction: None,
             previous_instruction: None,
+            symbol_table: Rc::new(Mutex::new(SymbolTable::new())),
+        }
+    }
+
+    pub fn with_state(symbol_table: Rc<Mutex<SymbolTable>>, constants: Rc<Mutex<Vec<Object>>>) -> Self {
+        Compiler {
+            instructions: Instructions::new(),
+            last_instruction: None,
+            previous_instruction: None,
+            constants,
+            symbol_table,
         }
     }
 
@@ -48,9 +64,16 @@ impl Compiler {
                     .context("Compiling ExpressionStatement expression.")?;
                 self.emit(Opcode::OpPop, vec![])?;
             }
-            Statement::LET(LetStatement{token: _, value: exp, identifier: id}) => {
+            Statement::LET(LetStatement { token: _, value: exp, identifier: id }) => {
                 self.compile_expression(exp)
                     .context("Compiling value of let statement.")?;
+
+                let symbol = self.symbol_table.lock()
+                    .expect("Failed to access symbol table")
+                    .define(&id.value);
+
+                self.emit(Opcode::OpSetGlobal, vec![symbol.index as u16])
+                    .context("Emitting OpSetGlobal for let statement.")?;
             }
             _ => bail!("Statement {:?} can't yet be compiled.", statement)
         }
@@ -172,16 +195,13 @@ impl Compiler {
                     .context("Swapping jump address of conditional.")?;
 
                 if let Some(alt) = alternative {
-
                     self.compile_block(&alt.statements)
                         .context("Compiling alternative of conditional.")?;
 
                     if self.last_instruction_is_pop() {
                         self.remove_last_pop();
                     }
-
-
-                }else {
+                } else {
                     self.emit(Opcode::OpNull, vec![])
                         .context("Emitting OpNull for empty alternative of conditional.")?;
                 }
@@ -190,7 +210,15 @@ impl Compiler {
 
                 self.change_operand(jump_pos, vec![after_alternative_pos as u16])
                     .context("Swapping jump address after conditional consequence.")?;
+            }
+            Expression::IDENT(id) => {
+                let symbol = self.symbol_table.lock()
+                    .expect("Failed to access symbol table.")
+                    .resolve(&id.value)
+                    .context("Resolving identifier in symbol table.")?;
 
+                self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
+                    .context("Emitting OpGetGlobal to load identifier.")?;
             }
             _ => bail!("Expression {:?} can't yet be compiled.", expression)
         }
@@ -199,8 +227,12 @@ impl Compiler {
     }
 
     fn add_constant(&mut self, object: Object) -> usize {
-        self.constants.push(object);
-        return self.constants.len() - 1;
+        self.constants.lock()
+            .expect("Failed to access constants.")
+            .push(object);
+        return self.constants.lock()
+            .expect("Failed to access constants.")
+            .len() - 1;
     }
 
     fn add_instruction(&mut self, ins: Vec<u8>) -> usize {
@@ -268,10 +300,17 @@ impl Compiler {
     }
 
     pub(crate) fn bytecode(&self) -> Result<Bytecode> {
-        if self.constants.len() == 0 && self.instructions.len() == 0 {
+        if self.constants.lock()
+            .expect("Failed to access constants.")
+            .len() == 0 && self.instructions.len() == 0 {
             bail!("Compiler did not produce any bytecode!");
         }
-        Ok(Bytecode { instructions: self.instructions.clone(), constants: self.constants.clone() })
+        Ok(Bytecode {
+            instructions: self.instructions.clone(),
+            constants: self.constants.lock()
+                .expect("Failed to access constants.")
+                .clone(),
+        })
     }
 }
 

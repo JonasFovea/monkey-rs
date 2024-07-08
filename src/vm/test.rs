@@ -191,3 +191,14 @@ fn test_conditionals() {
 
     run_vm_tests(tests);
 }
+
+#[test]
+fn test_global_let_statement(){
+    let tests = vec![
+        VMTestCase::new_int_result_case("let one = 1; one;", 1),
+        VMTestCase::new_int_result_case("let one = 1; let two = 2; one + two", 3),
+        VMTestCase::new_int_result_case("let one = 1; let two = one + one; one + two", 3),
+    ];
+    
+    run_vm_tests(tests);
+}
