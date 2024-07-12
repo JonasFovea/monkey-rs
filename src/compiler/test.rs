@@ -235,7 +235,7 @@ fn test_conditionals() {
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
-        CompilerTestCase{
+        CompilerTestCase {
             input: "if (true) {10} else {20}; 3333;".to_string(),
             expected_constants: vec![Object::Integer(10), Object::Integer(20), Object::Integer(3333)],
             expected_instructions: vec![
@@ -254,52 +254,133 @@ fn test_conditionals() {
                 //0014
                 make(Opcode::OpConstant, vec![2]).unwrap(),
                 //0017
-                make(Opcode::OpPop, vec![]).unwrap()
-            ]
-        }
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
     ];
 
     run_compiler_tests(tests);
 }
 
 #[test]
-fn test_global_let_statement(){
+fn test_global_let_statement() {
     let tests = vec![
-      CompilerTestCase{
-          input: "let one = 1; let two = 2;".to_string(),
-          expected_constants: vec![Object::Integer(1), Object::Integer(2)],
-          expected_instructions: vec![
-              make(Opcode::OpConstant, vec![0]).unwrap(),
-              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
-              make(Opcode::OpConstant, vec![1]).unwrap(),
-              make(Opcode::OpSetGlobal, vec![1]).unwrap()
-          ]
-      }  ,
-      CompilerTestCase{
-          input: "let one = 1; one;".to_string(),
-          expected_constants: vec![Object::Integer(1)],
-          expected_instructions: vec![
-              make(Opcode::OpConstant, vec![0]).unwrap(),
-              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
-              make(Opcode::OpGetGlobal, vec![0]).unwrap(),
-              make(Opcode::OpPop, vec![]).unwrap()
-          ]
-      },
-      CompilerTestCase{
-          input: "let one = 1; let two = one; two;".to_string(),
-          expected_constants: vec![Object::Integer(1)],
-          expected_instructions: vec![
-              make(Opcode::OpConstant, vec![0]).unwrap(),
-              make(Opcode::OpSetGlobal, vec![0]).unwrap(),
-              make(Opcode::OpGetGlobal, vec![0]).unwrap(),
-              make(Opcode::OpSetGlobal, vec![1]).unwrap(),
-              make(Opcode::OpGetGlobal, vec![1]).unwrap(),
-              make(Opcode::OpPop, vec![]).unwrap()
-          ]
-      }
+        CompilerTestCase {
+            input: "let one = 1; let two = 2;".to_string(),
+            expected_constants: vec![Object::Integer(1), Object::Integer(2)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![1]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "let one = 1; one;".to_string(),
+            expected_constants: vec![Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "let one = 1; let two = one; two;".to_string(),
+            expected_constants: vec![Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![1]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![1]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
     ];
-    
+
     run_compiler_tests(tests)
+}
+
+#[test]
+fn test_string_expressions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "\"monkey\"".to_string(),
+            expected_constants: vec![Object::String("monkey".to_string())],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "\"mon\" + \"key\"".to_string(),
+            expected_constants: vec![Object::String("mon".to_string()), Object::String("key".to_string())],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpAdd, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_array_expressions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "[]".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpArray, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "[1, 2, 3]".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpArray, vec![3]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "[1 + 2, 3 - 4, 5 * 6]".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+                Object::Integer(4),
+                Object::Integer(5),
+                Object::Integer(6),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpAdd, vec![]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpConstant, vec![3]).unwrap(),
+                make(Opcode::OpSub, vec![]).unwrap(),
+                make(Opcode::OpConstant, vec![4]).unwrap(),
+                make(Opcode::OpConstant, vec![5]).unwrap(),
+                make(Opcode::OpMul, vec![]).unwrap(),
+                make(Opcode::OpArray, vec![3]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+
+    run_compiler_tests(tests);
 }
 
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
@@ -336,14 +417,21 @@ fn test_integer_object(expected: i64, actual: &Object) {
     }
 }
 
+fn test_string_object(expected: &str, actual: &Object) {
+    match actual {
+        Object::String(s) => assert_eq!(expected, *s, "Object has wrong value. got={}, want={}", s, expected),
+        _ => assert!(false, "Object is not a String! Got {} instead.", actual.type_str())
+    }
+}
+
 fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
     let concatted = Instructions::join(expected.clone());
     assert_eq!(concatted.len(), actual.len(),
                "Wrong instruction length.\nwant={:?}\n got={:?}",
                &concatted.to_string(), &actual.to_string());
 
-    for (i,(e, a)) in concatted.0.iter().zip(actual.0).enumerate() {
-        assert_eq!(*e, a, "Instruction {i} does not match!\nwant={}\n got={}", e, a);
+    for (i, (e, a)) in concatted.0.iter().zip(actual.0).enumerate() {
+        assert_eq!(*e, a, "Instruction {} does not match!\nwant={}\n got={}\ninstructions:\n{}\n", i, e, a, concatted.to_string().unwrap());
     }
 }
 
@@ -355,8 +443,10 @@ fn test_constants(expected: Vec<Object>, actual: Vec<Object>) {
             Object::Integer(i) => {
                 test_integer_object(*i, &a);
             }
+            Object::String(s) => {
+                test_string_object(s, &a);
+            }
             _ => { assert!(false, "Constants can't be compared.") }
         }
     }
 }
-

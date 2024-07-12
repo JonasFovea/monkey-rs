@@ -220,6 +220,20 @@ impl Compiler {
                 self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
                     .context("Emitting OpGetGlobal to load identifier.")?;
             }
+            Expression::STRING_LITERAL(_, s) => {
+                let string = Object::String(s.clone());
+                let const_pos = self.add_constant(string) as u16;
+                self.emit(Opcode::OpConstant, vec![const_pos])
+                    .context("Emitting code for string literal.")?;
+            }
+            Expression::ARRAY_LITERAL(_, elements) => {
+                for elem in elements {
+                    self.compile_expression(elem)
+                        .context("Compiling array element.")?;
+                }
+                self.emit(Opcode::OpArray, vec![elements.len() as u16])
+                    .context("Emmitting Array literal.")?;
+            }
             _ => bail!("Expression {:?} can't yet be compiled.", expression)
         }
 

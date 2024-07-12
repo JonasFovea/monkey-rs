@@ -24,6 +24,24 @@ fn test_boolean_object(expected: bool, actual: &Object) {
     }
 }
 
+fn test_string_object(expected: &str, actual: &Object) {
+    match actual {
+        Object::String(s) => assert_eq!(expected, s, "Object has wrong value. got={}, want={}", s, expected),
+        _ => assert!(false, "Object is not a string! Got {} instead.", actual.type_str())
+    }
+}
+
+fn test_array_object(objects: &[Object], actual: &Object) {
+    match actual {
+        Object::Array(elems) => {
+            for (i, (e, a)) in objects.iter().zip(elems).enumerate() {
+                assert_eq!(e, a, "Object at index {} in array is not equal to expected!\nwant={}\n got={}\n", i, e, a);
+            }
+        }
+        _ => assert!(false, "Object is not an array! Got {} instead.", actual.type_str())
+    }
+}
+
 #[derive(Debug)]
 struct VMTestCase {
     input: String,
@@ -41,6 +59,20 @@ impl VMTestCase {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Boolean(expected_bool),
+        }
+    }
+
+    pub(crate) fn new_string_result_case(input: &str, expected_string: &str) -> Self {
+        VMTestCase {
+            input: input.to_string(),
+            expected: Object::String(expected_string.to_string()),
+        }
+    }
+
+    pub(crate) fn new_array_result_case(input: &str, expected_array: Vec<Object>) -> Self {
+        VMTestCase {
+            input: input.to_string(),
+            expected: Object::Array(expected_array),
         }
     }
 }
@@ -78,6 +110,8 @@ fn test_expected_object(expected: &Object, actual: &Object) {
         Object::Integer(i) => test_integer_object(*i, actual),
         Object::Boolean(b) => test_boolean_object(*b, actual),
         Object::Null => assert_eq!(expected, actual),
+        Object::String(s) => test_string_object(s, actual),
+        Object::Array(obj) => test_array_object(obj, actual),
         _ => todo!("Test case not implemented.")
     }
 }
@@ -183,22 +217,47 @@ fn test_conditionals() {
             input: "if (false) { 10 }".to_string(),
             expected: Object::Null,
         },
-        VMTestCase{
+        VMTestCase {
             input: "if (( if (false) { 10 })) { 10 } else { 20 }".to_string(),
-            expected: Object::Integer(20)
-        }
+            expected: Object::Integer(20),
+        },
     ];
 
     run_vm_tests(tests);
 }
 
 #[test]
-fn test_global_let_statement(){
+fn test_global_let_statement() {
     let tests = vec![
         VMTestCase::new_int_result_case("let one = 1; one;", 1),
         VMTestCase::new_int_result_case("let one = 1; let two = 2; one + two", 3),
         VMTestCase::new_int_result_case("let one = 1; let two = one + one; one + two", 3),
     ];
-    
+
     run_vm_tests(tests);
+}
+
+#[test]
+fn test_string_expressions() {
+    let tests = vec![
+        VMTestCase::new_string_result_case("\"monkey\"", "monkey"),
+        VMTestCase::new_string_result_case("\"mon\" + \"key\"", "monkey"),
+        VMTestCase::new_string_result_case("\"mon\" + \"key\" + \"banana\"", "monkeybanana"),
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_array_literals() {
+    let tests = vec![
+        VMTestCase::new_array_result_case("[]",
+                                          vec![]),
+        VMTestCase::new_array_result_case("[1, 2, 3]",
+                                          vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)]),
+        VMTestCase::new_array_result_case("[1 + 2, 3 * 4, 5 + 6]",
+                                          vec![Object::Integer(3), Object::Integer(12), Object::Integer(11)]),
+    ];
+
+    run_vm_tests(tests)
 }

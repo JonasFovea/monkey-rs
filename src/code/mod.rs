@@ -93,6 +93,7 @@ pub enum Opcode {
     OpNull,
     OpGetGlobal,
     OpSetGlobal,
+    OpArray,
 }
 
 impl Into<u8> for Opcode {
@@ -109,7 +110,7 @@ impl Into<u8> for Opcode {
             Opcode::OpEqual => 9,
             Opcode::OpNotEqual => 10,
             Opcode::OpGreaterThan => 11,
-            Opcode:: OpGreaterEquals => 12,
+            Opcode::OpGreaterEquals => 12,
             Opcode::OpMinus => 13,
             Opcode::OpBang => 14,
             Opcode::OpJumpNotTruthy => 15,
@@ -117,6 +118,7 @@ impl Into<u8> for Opcode {
             Opcode::OpNull => 0,
             Opcode::OpGetGlobal => 17,
             Opcode::OpSetGlobal => 18,
+            Opcode::OpArray => 19,
         }
     }
 }
@@ -156,49 +158,53 @@ impl Into<Definition> for Opcode {
                 name: "OpFalse".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpEqual => Definition{
+            Opcode::OpEqual => Definition {
                 name: "OpEqual".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpNotEqual => Definition{
+            Opcode::OpNotEqual => Definition {
                 name: "OpNotEqual".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpGreaterThan => Definition{
+            Opcode::OpGreaterThan => Definition {
                 name: "OpGreaterThan".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpGreaterEquals => Definition{
+            Opcode::OpGreaterEquals => Definition {
                 name: "OpGreaterEquals".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpMinus => Definition{
+            Opcode::OpMinus => Definition {
                 name: "OpMinus".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpBang => Definition{
+            Opcode::OpBang => Definition {
                 name: "OpBang".to_string(),
                 operand_widths: vec![],
             },
-            Opcode::OpJumpNotTruthy => Definition{
+            Opcode::OpJumpNotTruthy => Definition {
                 name: "OpJumpNotTruthy".to_string(),
-                operand_widths: vec![2]
+                operand_widths: vec![2],
             },
-            Opcode::OpJump => Definition{
+            Opcode::OpJump => Definition {
                 name: "OpJump".to_string(),
-                operand_widths: vec![2]
+                operand_widths: vec![2],
             },
-            Opcode::OpNull => Definition{
+            Opcode::OpNull => Definition {
                 name: "OpNull".to_string(),
-                operand_widths: vec![]
+                operand_widths: vec![],
             },
-            Opcode::OpGetGlobal => Definition{
+            Opcode::OpGetGlobal => Definition {
                 name: "OpGetGlobal".to_string(),
-                operand_widths: vec![2]
+                operand_widths: vec![2],
             },
-            Opcode::OpSetGlobal => Definition{
+            Opcode::OpSetGlobal => Definition {
                 name: "OpSetGlobal".to_string(),
-                operand_widths: vec![2]
+                operand_widths: vec![2],
+            },
+            Opcode::OpArray => Definition {
+                name: "OpArray".to_string(),
+                operand_widths: vec![2],
             }
         }
     }
@@ -228,6 +234,7 @@ impl TryFrom<u8> for Opcode {
             0 => Ok(Opcode::OpNull),
             17 => Ok(Opcode::OpGetGlobal),
             18 => Ok(Opcode::OpSetGlobal),
+            19 => Ok(Opcode::OpArray),
             _ => bail!("opcode {} undefined", value),
         }
     }

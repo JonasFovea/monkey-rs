@@ -137,6 +137,17 @@ impl VM {
                     self.push(obj)
                         .context("Pushing global object onto the stack.")?
                 }
+                Opcode::OpArray => {
+                    let num_elements = read_uint16(&self.instructions.0[ip + 1..]) as usize;
+                    ip += 2;
+
+                    let array = self.build_array(self.sp - num_elements, self.sp);
+
+                    self.sp -= num_elements;
+
+                    self.push(array)
+                        .context("Pushing array object.")?;
+                }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
 
@@ -153,6 +164,10 @@ impl VM {
             (Object::Integer(l), Object::Integer(r)) => {
                 self.execute_binary_integer_operation(opcode, *l, *r)
                     .context("Executing binary integer operation.")?;
+            }
+            (Object::String(l), Object::String(r)) => {
+                self.execute_binary_string_operation(opcode, l, r)
+                    .context("Executing binary string operation.")?;
             }
             _ => bail!("Unsupported types for binary operation: {:?} {:?}", left.type_str(), right.type_str())
         }
@@ -181,6 +196,18 @@ impl VM {
         };
         self.push(Object::Integer(result))
             .context("Pushing result of binary integer operation.")?;
+        Ok(())
+    }
+
+    fn execute_binary_string_operation(&mut self, opcode: Opcode, left: &str, right: &str) -> Result<()> {
+        if opcode != Opcode::OpAdd {
+            bail!("Unknown string operator: {:?}", opcode);
+        }
+        let mut new_string = String::from(left);
+        new_string.push_str(right);
+        self.push(Object::String(new_string))
+            .context("Pushing result of binary string operation.")?;
+
         Ok(())
     }
 
@@ -243,6 +270,16 @@ impl VM {
         } else { bail!("Unsupported operand type for prefix minus: {:?}", operand.type_str()) }
 
         Ok(())
+    }
+
+    fn build_array(&mut self, start: usize, stop: usize) -> Object {
+        let mut elements = vec![Object::Null; stop - start];
+
+        for i in start..stop {
+            elements[i - start] = self.stack[i].clone();
+        }
+
+        Object::Array(elements)
     }
 
     fn push(&mut self, obj: Object) -> Result<()> {
