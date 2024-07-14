@@ -383,6 +383,114 @@ fn test_array_expressions() {
     run_compiler_tests(tests);
 }
 
+#[test]
+fn test_hash_literals() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "{}".to_string(),
+            expected_constants: vec![],
+            expected_instructions: vec![
+                make(Opcode::OpHash, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "{1: 2, 3: 4, 5: 6}".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+                Object::Integer(4),
+                Object::Integer(5),
+                Object::Integer(6),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpConstant, vec![3]).unwrap(),
+                make(Opcode::OpConstant, vec![4]).unwrap(),
+                make(Opcode::OpConstant, vec![5]).unwrap(),
+                make(Opcode::OpHash, vec![6]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "{1: 2 + 3, 4: 5 * 6}".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+                Object::Integer(4),
+                Object::Integer(5),
+                Object::Integer(6),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpAdd, vec![]).unwrap(),
+                make(Opcode::OpConstant, vec![3]).unwrap(),
+                make(Opcode::OpConstant, vec![4]).unwrap(),
+                make(Opcode::OpConstant, vec![5]).unwrap(),
+                make(Opcode::OpMul, vec![]).unwrap(),
+                make(Opcode::OpHash, vec![4]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_index_expressions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "[1, 2, 3][1 + 1]".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(3),
+                Object::Integer(1),
+                Object::Integer(1),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpArray, vec![3]).unwrap(),
+                make(Opcode::OpConstant, vec![3]).unwrap(),
+                make(Opcode::OpConstant, vec![4]).unwrap(),
+                make(Opcode::OpAdd, vec![]).unwrap(),
+                make(Opcode::OpIndex, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "{1: 2}[2 - 1]".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::Integer(2),
+                Object::Integer(1),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpHash, vec![2]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpConstant, vec![3]).unwrap(),
+                make(Opcode::OpSub, vec![]).unwrap(),
+                make(Opcode::OpIndex, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+
+    run_compiler_tests(tests)
+}
+
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
     for test in tests {
         let program = parse(&test.input);

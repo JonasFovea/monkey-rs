@@ -234,6 +234,28 @@ impl Compiler {
                 self.emit(Opcode::OpArray, vec![elements.len() as u16])
                     .context("Emmitting Array literal.")?;
             }
+            Expression::HASH_LITERAL(_, keys, vals) => {
+                for (k, v) in keys.iter().zip(vals) {
+                    self.compile_expression(k)
+                        .context("Compiling key expression of hash literal.")?;
+
+                    self.compile_expression(v)
+                        .context("Compiling value expression of hash literal.")?;
+                }
+
+                self.emit(Opcode::OpHash, vec![(keys.len() * 2) as u16])
+                    .context("Emitting OpHash for hash literal.")?;
+            }
+            Expression::INDEX_EXPRESSION(_, left, index) => {
+                self.compile_expression(left)
+                    .context("Compiling left side of index expression.")?;
+
+                self.compile_expression(index)
+                    .context("Compiling index of index expression.")?;
+
+                self.emit(Opcode::OpIndex, vec![])
+                    .context("Emitting index operator.")?;
+            }
             _ => bail!("Expression {:?} can't yet be compiled.", expression)
         }
 

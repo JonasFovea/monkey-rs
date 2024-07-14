@@ -94,6 +94,8 @@ pub enum Opcode {
     OpGetGlobal,
     OpSetGlobal,
     OpArray,
+    OpHash,
+    OpIndex,
 }
 
 impl Into<u8> for Opcode {
@@ -119,6 +121,8 @@ impl Into<u8> for Opcode {
             Opcode::OpGetGlobal => 17,
             Opcode::OpSetGlobal => 18,
             Opcode::OpArray => 19,
+            Opcode::OpHash => 20,
+            Opcode::OpIndex => 21,
         }
     }
 }
@@ -205,6 +209,14 @@ impl Into<Definition> for Opcode {
             Opcode::OpArray => Definition {
                 name: "OpArray".to_string(),
                 operand_widths: vec![2],
+            },
+            Opcode::OpHash => Definition {
+                name: "OpHash".to_string(),
+                operand_widths: vec![2],
+            },
+            Opcode::OpIndex => Definition {
+                name: "OpIndex".to_string(),
+                operand_widths: vec![],
             }
         }
     }
@@ -235,6 +247,8 @@ impl TryFrom<u8> for Opcode {
             17 => Ok(Opcode::OpGetGlobal),
             18 => Ok(Opcode::OpSetGlobal),
             19 => Ok(Opcode::OpArray),
+            20 => Ok(Opcode::OpHash),
+            21 => Ok(Opcode::OpIndex),
             _ => bail!("opcode {} undefined", value),
         }
     }

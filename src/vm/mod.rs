@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Mutex;
 
@@ -5,7 +6,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::code::{Instructions, Opcode, read_uint16};
 use crate::compiler::Bytecode;
-use crate::object::Object;
+use crate::object::{HashKey, Object};
 
 mod test;
 
@@ -148,6 +149,27 @@ impl VM {
                     self.push(array)
                         .context("Pushing array object.")?;
                 }
+                Opcode::OpHash => {
+                    let num_elements = read_uint16(&self.instructions.0[ip + 1..]) as usize;
+                    ip += 2;
+
+                    let hash = self.build_hash(self.sp - num_elements, self.sp)
+                        .context("Build Hash object form stack contents.")?;
+
+                    self.sp -= num_elements;
+
+                    self.push(hash)
+                        .context("Pushing array object.")?;
+                }
+                Opcode::OpIndex => {
+                    let index = self.pop()
+                        .context("Popping index.")?;
+                    let left = self.pop()
+                        .context("Popping left side of index expression.")?;
+
+                    self.execute_index_expression(left, index)
+                        .context("Evaluating index expression.")?;
+                }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
 
@@ -272,6 +294,33 @@ impl VM {
         Ok(())
     }
 
+    fn execute_index_expression(&mut self, left: Object, index: Object) -> Result<()> {
+        match (&left, &index) {
+            (Object::Array(elems), Object::Integer(i)) => {
+                let obj = elems.get(*i as usize)
+                    .unwrap_or(&Object::Null)
+                    .clone();
+
+                self.push(obj)
+                    .context("Pushing array element.")?;
+            }
+            (Object::Hash(map), idx) => {
+                let key = HashKey::from_object(idx)
+                    .context("Building HashKey from index object.")?;
+
+                let value = map.get(&key)
+                    .unwrap_or(&Object::Null)
+                    .clone();
+
+                self.push(value)
+                    .context("Pushing hash element.")?;
+            }
+            _ => bail!("Index operator is not supported for types {}[{}]", left.type_str(), index.type_str())
+        }
+
+        Ok(())
+    }
+
     fn build_array(&mut self, start: usize, stop: usize) -> Object {
         let mut elements = vec![Object::Null; stop - start];
 
@@ -280,6 +329,19 @@ impl VM {
         }
 
         Object::Array(elements)
+    }
+
+    fn build_hash(&mut self, start: usize, stop: usize) -> Result<Object> {
+        let mut map = HashMap::with_capacity((stop - start) / 2);
+
+        for i in (start..stop).step_by(2) {
+            let key = HashKey::from_object(&self.stack[i])
+                .context("Building HashKey from stack object.")?;
+            let value = self.stack[i + 1].clone();
+            map.insert(key, value);
+        }
+
+        Ok(Object::Hash(map))
     }
 
     fn push(&mut self, obj: Object) -> Result<()> {

@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use crate::ast::{Parser, Program};
 use crate::compiler::Compiler;
 use crate::lexer::Lexer;
-use crate::object::Object;
+use crate::object::{HashKey, Object};
 use crate::vm::VM;
 
 fn parse(input: &str) -> Program {
@@ -42,6 +43,17 @@ fn test_array_object(objects: &[Object], actual: &Object) {
     }
 }
 
+fn test_hash_object(expected: &HashMap<HashKey, Object>, actual: &Object) {
+    match actual {
+        Object::Hash(amap) => {
+            for (k, v) in expected {
+                assert_eq!(*v, amap[k], "Expected values not equal!\nwant={}\n got={}\n", v, amap[k]);
+            }
+        }
+        _ => assert!(false, "Object is not a hash! Got {} instead.", actual.type_str())
+    }
+}
+
 #[derive(Debug)]
 struct VMTestCase {
     input: String,
@@ -73,6 +85,12 @@ impl VMTestCase {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Array(expected_array),
+        }
+    }
+    pub(crate) fn new_null_result_case(input: &str) -> Self {
+        VMTestCase {
+            input: input.to_string(),
+            expected: Object::Null,
         }
     }
 }
@@ -112,6 +130,7 @@ fn test_expected_object(expected: &Object, actual: &Object) {
         Object::Null => assert_eq!(expected, actual),
         Object::String(s) => test_string_object(s, actual),
         Object::Array(obj) => test_array_object(obj, actual),
+        Object::Hash(map) => test_hash_object(map, actual),
         _ => todo!("Test case not implemented.")
     }
 }
@@ -260,4 +279,48 @@ fn test_array_literals() {
     ];
 
     run_vm_tests(tests)
+}
+
+#[test]
+fn test_hash_literals() {
+    let tests = vec![
+        VMTestCase {
+            input: "{}".to_string(),
+            expected: Object::Hash(HashMap::new()),
+        },
+        VMTestCase {
+            input: "{1: 2, 2: 3}".to_string(),
+            expected: Object::Hash(HashMap::from([
+                (HashKey::from_object(&Object::Integer(1)).unwrap(), Object::Integer(2)),
+                (HashKey::from_object(&Object::Integer(2)).unwrap(), Object::Integer(3)),
+            ])),
+        },
+        VMTestCase {
+            input: "{1 + 1: 2 * 2, 3 + 3: 4 * 4}".to_string(),
+            expected: Object::Hash(HashMap::from([
+                (HashKey::from_object(&Object::Integer(2)).unwrap(), Object::Integer(4)),
+                (HashKey::from_object(&Object::Integer(6)).unwrap(), Object::Integer(16)),
+            ])),
+        },
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_index_expressions() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("[1, 2, 3][1]", 2),
+        VMTestCase::new_int_result_case("[1, 2, 3][0 + 2]", 3),
+        VMTestCase::new_int_result_case("[[1, 1, 1]][0][0]", 1),
+        VMTestCase::new_null_result_case("[][0]"),
+        VMTestCase::new_null_result_case("[1, 2, 3][99]"),
+        VMTestCase::new_null_result_case("[1][-1]"),
+        VMTestCase::new_int_result_case("{1: 1, 2: 2}[1]", 1),
+        VMTestCase::new_int_result_case("{1: 1, 2: 2}[2]", 2),
+        VMTestCase::new_null_result_case("{1: 1}[0]"),
+        VMTestCase::new_null_result_case("{}[0]"),
+    ];
+
+    run_vm_tests(tests);
 }
