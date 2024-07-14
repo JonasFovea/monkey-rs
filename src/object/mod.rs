@@ -7,6 +7,7 @@ use std::sync::Mutex;
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{BlockStatement, Identifier};
+use crate::code::Instructions;
 
 #[derive(Clone)]
 pub enum Object {
@@ -19,6 +20,7 @@ pub enum Object {
     Builtin(String),
     Array(Vec<Object>),
     Hash(HashMap<HashKey, Object>),
+    CompiledFunction(Instructions),
 }
 
 impl Object {
@@ -33,10 +35,11 @@ impl Object {
             Object::Return(_) => "Return",
             Object::Array(_) => "Array",
             Object::Hash(_) => "Hash",
+            Object::CompiledFunction(_) => "CompiledFunction",
         }.to_string()
     }
 
-    pub(crate) fn is_truthy(&self) -> bool{
+    pub(crate) fn is_truthy(&self) -> bool {
         match self {
             Object::Boolean(b) => *b,
             Object::Null => false,
@@ -77,11 +80,16 @@ impl PartialEq for Object {
                 if let Object::Array(b) = other {
                     a == b
                 } else { false }
-            },
+            }
             Object::Hash(a) => {
                 if let Object::Hash(b) = other {
                     a == b
-                }else { false }
+                } else { false }
+            }
+            Object::CompiledFunction(a) => {
+                if let Object::CompiledFunction(b) = other {
+                    a == b
+                } else { false }
             }
         }
     }
@@ -108,14 +116,15 @@ impl fmt::Display for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
-            },
+            }
             Object::Hash(map) => {
                 format!("{{{}}}", map
                     .iter()
-                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .map(|(k, v)| format!("{}: {}", k, v))
                     .collect::<Vec<String>>()
                     .join(", "))
             }
+            Object::CompiledFunction(_) => format!("CompiledFunction[{}]", &self)
         };
         write!(f, "{}", formatted)
     }
@@ -140,14 +149,15 @@ impl fmt::Debug for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
-            },
+            }
             Object::Hash(map) => {
                 format!("Hash {{ Elements: {{{:?}}}}}", map
                     .iter()
-                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .map(|(k, v)| format!("{}: {}", k, v))
                     .collect::<Vec<String>>()
                     .join(", "))
             }
+            Object::CompiledFunction(ins) => format!("CompiledFunction {{instructions: {:?}}}", ins),
         };
         write!(f, "{}", formatted)
     }
@@ -273,7 +283,7 @@ fn first(args: Vec<Object>) -> Result<Object> {
     }
 }
 
-fn last(args: Vec<Object>) -> Result<Object>{
+fn last(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
         bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
     }
@@ -282,7 +292,7 @@ fn last(args: Vec<Object>) -> Result<Object>{
             if a.len() < 1 {
                 return Ok(Object::Null);
             }
-            Ok(a[a.len()-1].clone())
+            Ok(a[a.len() - 1].clone())
         }
         a => bail!("Invalid argument of type: {}", a.type_str())
     }
@@ -317,8 +327,8 @@ fn push(args: Vec<Object>) -> Result<Object> {
     }
 }
 
-fn puts(args: Vec<Object>) -> Result<Object>{
-    for arg in args{
+fn puts(args: Vec<Object>) -> Result<Object> {
+    for arg in args {
         println!("{arg}");
     }
     Ok(Object::Null)
@@ -337,8 +347,8 @@ impl HashKey {
             Object::String(s) => Ok(HashKey::STRING(s.clone())),
             Object::Integer(i) => Ok(HashKey::INT(*i)),
             Object::Boolean(b) => Ok(HashKey::BOOL(*b)),
-            o => { 
-                bail!("Object of type {} is not hashable! Supported types: Integer, String, Boolean.", o.type_str()); 
+            o => {
+                bail!("Object of type {} is not hashable! Supported types: Integer, String, Boolean.", o.type_str());
             }
         }
     }
@@ -346,7 +356,7 @@ impl HashKey {
 
 impl fmt::Display for HashKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self { 
+        write!(f, "{}", match self {
             HashKey::STRING(s) => format!("{}", s),
             HashKey::INT(i) => format!("{}", i),
             HashKey::BOOL(b) => format!("{}", b)

@@ -490,6 +490,163 @@ fn test_index_expressions() {
     run_compiler_tests(tests)
 }
 
+#[test]
+fn test_functions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "fn() { return 5 + 10 }".to_string(),
+            expected_constants: vec![
+                Object::Integer(5),
+                Object::Integer(10),
+                Object::CompiledFunction(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![0]).unwrap(),
+                    make(Opcode::OpConstant, vec![1]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ])),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "fn() { 5 + 10 }".to_string(),
+            expected_constants: vec![
+                Object::Integer(5),
+                Object::Integer(10),
+                Object::CompiledFunction(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![0]).unwrap(),
+                    make(Opcode::OpConstant, vec![1]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ])),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "fn() {1; 2}".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Integer(2),
+                Object::CompiledFunction(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![0]).unwrap(),
+                    make(Opcode::OpPop, vec![]).unwrap(),
+                    make(Opcode::OpConstant, vec![1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ])),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_compilation_scopes() {
+    let mut compiler = Compiler::new();
+    assert_eq!(0, compiler.scope_index, "Scope index wrong. got={}, want={}", compiler.scope_index, 0);
+
+    compiler.emit(Opcode::OpMul, vec![]).expect("Unable to emit OpMul.");
+
+    compiler.enter_scope();
+    assert_eq!(1, compiler.scope_index, "Scope index wrong. got={}, want={}", compiler.scope_index, 1);
+
+    compiler.emit(Opcode::OpSub, vec![]).expect("Unable to emit OpSub.");
+
+    assert_eq!(1, compiler.scopes[compiler.scope_index].instructions.len(),
+               "Instructions length wrong. got={}, want={}",
+               compiler.scopes[compiler.scope_index].instructions.len(), 1);
+
+    let last = compiler.scopes[compiler.scope_index].last_instruction
+        .expect("Last instruction of current scope is None!");
+    assert_eq!(Opcode::OpSub, last.opcode, "Last instruction opcode wrong. got={:?} want={:?}", last.opcode, Opcode::OpSub);
+
+    compiler.leave_scope().unwrap();
+    assert_eq!(0, compiler.scope_index, "Scope index wrong. got={}, want={}", compiler.scope_index, 0);
+
+    compiler.emit(Opcode::OpAdd, vec![]).expect("Unable to emit OpAdd.");
+    assert_eq!(2, compiler.scopes[compiler.scope_index].instructions.len(),
+               "instructions lenght wrong. got={}, want={}",
+               compiler.scopes[compiler.scope_index].instructions.len(), 2);
+
+    let last = compiler.scopes[compiler.scope_index].last_instruction
+        .expect("Last instruction of current scope is None!");
+    assert_eq!(Opcode::OpAdd, last.opcode, "Last instruction opcode wrong. got={:?} want={:?}", last.opcode, Opcode::OpAdd);
+
+    let previous = compiler.scopes[compiler.scope_index].previous_instruction
+        .expect("Previous instruction of current scope is None!");
+    assert_eq!(Opcode::OpMul, previous.opcode, "Last instruction opcode wrong. got={:?} want={:?}", previous.opcode, Opcode::OpMul);
+}
+
+#[test]
+fn test_functions_without_return_value() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "fn () {}".to_string(),
+            expected_constants: vec![
+                Object::CompiledFunction(make(Opcode::OpReturn, vec![]).unwrap())
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        }
+    ];
+
+    run_compiler_tests(tests);
+}
+
+#[test]
+fn test_function_calls() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "fn () { 24 }()".to_string(),
+            expected_constants: vec![
+                Object::Integer(24),
+                Object::CompiledFunction(
+                    Instructions::join(vec![
+                        make(Opcode::OpConstant, vec![0]).unwrap(),
+                        make(Opcode::OpReturnValue, vec![]).unwrap(),
+                    ])
+                ),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpCall, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+        CompilerTestCase {
+            input: "let noArg = fn () { 24 }; noArg();".to_string(),
+            expected_constants: vec![
+                Object::Integer(24),
+                Object::CompiledFunction(
+                    Instructions::join(vec![
+                        make(Opcode::OpConstant, vec![0]).unwrap(),
+                        make(Opcode::OpReturnValue, vec![]).unwrap(),
+                    ])
+                ),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpCall, vec![]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ],
+        },
+    ];
+
+    run_compiler_tests(tests);
+}
 
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
     for test in tests {
@@ -536,10 +693,12 @@ fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
     let concatted = Instructions::join(expected.clone());
     assert_eq!(concatted.len(), actual.len(),
                "Wrong instruction length.\nwant={:?}\n got={:?}",
-               &concatted.to_string(), &actual.to_string());
+               &concatted.to_string().unwrap(), &actual.to_string().unwrap());
 
-    for (i, (e, a)) in concatted.0.iter().zip(actual.0).enumerate() {
-        assert_eq!(*e, a, "Instruction {} does not match!\nwant={}\n got={}\ninstructions:\n{}\n", i, e, a, concatted.to_string().unwrap());
+    for (i, (e, a)) in concatted.0.iter().zip(&actual.0).enumerate() {
+        assert_eq!(*e, *a,
+                   "Instruction {} does not match!\nwant={} ({:?})\n got={} ({:?})\nInstructions:\n\twant={:?}\n\t got={:?}\n",
+                   i, e, Opcode::try_from(*e).unwrap(), a, Opcode::try_from(*a).unwrap(), actual.to_string().unwrap(), concatted.to_string().unwrap());
     }
 }
 
@@ -553,6 +712,14 @@ fn test_constants(expected: Vec<Object>, actual: Vec<Object>) {
             }
             Object::String(s) => {
                 test_string_object(s, &a);
+            }
+            Object::CompiledFunction(ie) => {
+                match a {
+                    Object::CompiledFunction(ia) => {
+                        test_instructions(vec![ie.clone()], ia);
+                    }
+                    _ => assert!(false, "Object is not a CompiledFunction! Got {} instead.", a.type_str())
+                }
             }
             _ => { assert!(false, "Constants can't be compared.") }
         }

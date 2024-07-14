@@ -96,6 +96,9 @@ pub enum Opcode {
     OpArray,
     OpHash,
     OpIndex,
+    OpCall,
+    OpReturnValue,
+    OpReturn,
 }
 
 impl Into<u8> for Opcode {
@@ -123,6 +126,9 @@ impl Into<u8> for Opcode {
             Opcode::OpArray => 19,
             Opcode::OpHash => 20,
             Opcode::OpIndex => 21,
+            Opcode::OpCall => 22,
+            Opcode::OpReturnValue => 23,
+            Opcode::OpReturn => 24,
         }
     }
 }
@@ -217,6 +223,18 @@ impl Into<Definition> for Opcode {
             Opcode::OpIndex => Definition {
                 name: "OpIndex".to_string(),
                 operand_widths: vec![],
+            },
+            Opcode::OpCall => Definition {
+                name: "OpCall".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpReturnValue => Definition {
+                name: "OpReturnValue".to_string(),
+                operand_widths: vec![],
+            },
+            Opcode::OpReturn => Definition {
+                name: "OpReturn".to_string(),
+                operand_widths: vec![],
             }
         }
     }
@@ -249,6 +267,9 @@ impl TryFrom<u8> for Opcode {
             19 => Ok(Opcode::OpArray),
             20 => Ok(Opcode::OpHash),
             21 => Ok(Opcode::OpIndex),
+            22 => Ok(Opcode::OpCall),
+            23 => Ok(Opcode::OpReturnValue),
+            24 => Ok(Opcode::OpReturn),
             _ => bail!("opcode {} undefined", value),
         }
     }
