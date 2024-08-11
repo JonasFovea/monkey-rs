@@ -4,35 +4,47 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 
-use crate::code::{Instructions, Opcode, read_uint16};
+use crate::code::{read_uint16, Instructions, Opcode};
 use crate::compiler::Bytecode;
 use crate::object::{HashKey, Object};
+use crate::vm::frame::Frame;
 
 mod test;
+mod frame;
 
 const STACK_SIZE: usize = 2048;
 pub(crate) const GLOBALS_SIZE: usize = 65536;
+const MAX_FRAMES: usize = 1024;
 
 #[derive(Debug)]
 pub(crate) struct VM {
     constants: Vec<Object>,
-    instructions: Instructions,
     stack: [Object; STACK_SIZE],
     sp: usize,
     globals: Rc<Mutex<Box<[Object]>>>,
+    frames: [Option<Frame>; MAX_FRAMES],
+    frames_index: usize,
 }
 
 impl VM {
     pub fn new(bytecode: Bytecode) -> Self {
         const NULL: Object = Object::Null;
+
         match bytecode {
             Bytecode { instructions: ins, constants: cons } => {
+                const NONE: Option<Frame> = None;
+                let mut frames = [NONE; MAX_FRAMES];
+                let main_func = Object::CompiledFunction(ins);
+                let main_frame = Frame::new(main_func).unwrap();
+                frames[0] = Some(main_frame);
+
                 VM {
                     constants: cons,
-                    instructions: ins,
                     stack: [NULL; STACK_SIZE],
                     sp: 0,
                     globals: Rc::new(Mutex::new(vec![Object::Null; GLOBALS_SIZE].into_boxed_slice())),
+                    frames,
+                    frames_index: 1,
                 }
             }
         }
@@ -42,12 +54,19 @@ impl VM {
         const NULL: Object = Object::Null;
         match bytecode {
             Bytecode { instructions: ins, constants: cons } => {
+                const NONE: Option<Frame> = None;
+                let mut frames = [NONE; MAX_FRAMES];
+                let main_func = Object::CompiledFunction(ins);
+                let main_frame = Frame::new(main_func).unwrap();
+                frames[0] = Some(main_frame);
+
                 VM {
                     constants: cons,
-                    instructions: ins,
                     stack: [NULL; STACK_SIZE],
                     sp: 0,
                     globals,
+                    frames,
+                    frames_index: 1,
                 }
             }
         }
@@ -63,15 +82,16 @@ impl VM {
 
     #[allow(unreachable_patterns)]
     pub(crate) fn run(&mut self) -> Result<()> {
-        let mut ip = 0;
-        while ip < self.instructions.len() {
-            let op = Opcode::try_from(self.instructions[ip])
+        while self.current_frame().ip + 1 < self.current_func().0.len() as isize {
+            self.current_frame().ip += 1;
+            let ip = self.current_frame().ip as usize;
+            let op = Opcode::try_from(self.current_func().0[ip])
                 .context("Decoding fetched instruction byte.")?;
 
             match op {
                 Opcode::OpConstant => {
-                    let const_index = read_uint16(&self.instructions.0[ip + 1..]) as usize;
-                    ip += 2;
+                    let const_index = read_uint16(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 2;
 
                     self.push(self.constants[const_index].clone())
                         .with_context(|| format!("Pushing constant with idx {} onto the stack.", const_index))?;
@@ -102,18 +122,18 @@ impl VM {
                         .context("Executing minus operator.")?;
                 }
                 Opcode::OpJump => {
-                    let pos = read_uint16(&self.instructions.0[ip + 1..]);
+                    let pos = read_uint16(&self.current_func().0[ip + 1..]);
 
-                    ip = pos as usize - 1;
+                    self.current_frame().ip = pos as isize - 1;
                 }
                 Opcode::OpJumpNotTruthy => {
-                    let pos = read_uint16(&self.instructions.0[ip + 1..]);
-                    ip += 2;
+                    let pos = read_uint16(&self.current_func().0[ip + 1..]);
+                    self.current_frame().ip += 2;
 
                     let condition = self.pop()
                         .context("Popping condition value.")?;
                     if !condition.is_truthy() {
-                        ip = pos as usize - 1;
+                        self.current_frame().ip = pos as isize - 1;
                     }
                 }
                 Opcode::OpNull => {
@@ -121,8 +141,8 @@ impl VM {
                         .context("Pushing Null onto the stack.")?;
                 }
                 Opcode::OpSetGlobal => {
-                    let global_index = read_uint16(&self.instructions.0[ip + 1..]);
-                    ip += 2;
+                    let global_index = read_uint16(&self.current_func().0[ip + 1..]);
+                    self.current_frame().ip += 2;
 
                     self.globals
                         .lock().expect("Failed to access globals.")
@@ -130,8 +150,8 @@ impl VM {
                         .context("Popping element to store in globals.")?;
                 }
                 Opcode::OpGetGlobal => {
-                    let global_index = read_uint16(&self.instructions.0[ip + 1..]);
-                    ip += 2;
+                    let global_index = read_uint16(&self.current_func().0[ip + 1..]);
+                    self.current_frame().ip += 2;
                     let obj = self.globals
                         .lock().expect("Failed to access globals.")
                         [global_index as usize].clone();
@@ -139,8 +159,8 @@ impl VM {
                         .context("Pushing global object onto the stack.")?
                 }
                 Opcode::OpArray => {
-                    let num_elements = read_uint16(&self.instructions.0[ip + 1..]) as usize;
-                    ip += 2;
+                    let num_elements = read_uint16(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 2;
 
                     let array = self.build_array(self.sp - num_elements, self.sp);
 
@@ -150,8 +170,8 @@ impl VM {
                         .context("Pushing array object.")?;
                 }
                 Opcode::OpHash => {
-                    let num_elements = read_uint16(&self.instructions.0[ip + 1..]) as usize;
-                    ip += 2;
+                    let num_elements = read_uint16(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 2;
 
                     let hash = self.build_hash(self.sp - num_elements, self.sp)
                         .context("Build Hash object form stack contents.")?;
@@ -170,10 +190,32 @@ impl VM {
                     self.execute_index_expression(left, index)
                         .context("Evaluating index expression.")?;
                 }
+                Opcode::OpCall => {
+                    let func = &self.stack[self.sp - 1];
+                    match func {
+                        Object::CompiledFunction(_) => {
+                            self.push_frame(Frame::new(func.clone())
+                                .context("Building new stack frame.")?)
+                                .context("Pushing new stack frame.")?;
+                        }
+                        _ => bail!("Calling non-function.")
+                    }
+                }
+                Opcode::OpReturnValue => {
+                    let return_value = self.pop().context("Popping return value.")?;
+                    self.pop_frame();
+                    let _ = self.pop();
+
+                    self.push(return_value).context("Pushing returned value.")?;
+                }
+                Opcode::OpReturn => {
+                    self.pop_frame().context("Popping stack frame after OpReturn.")?;
+                    self.pop().context("Popping stack element after OpReturn.")?;
+
+                    self.push(Object::Null).context("Pushing Null-Object after OpReturn.")?;
+                }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
-
-            ip += 1;
         }
         Ok(())
     }
@@ -368,5 +410,40 @@ impl VM {
 
     pub(crate) fn last_popped_stack_elem(&self) -> Result<Object> {
         Ok(self.stack.get(self.sp).expect("Retrieving last popped element from the stack.").clone())
+    }
+
+    fn current_frame(&mut self) -> &mut Frame {
+        self.frames[self.frames_index - 1].as_mut().unwrap()
+    }
+
+    fn current_func(&mut self) -> &mut Instructions {
+        match self.frames[self.frames_index - 1].as_mut() {
+            Some(Frame { func, ip: _ }) => {
+                match func.as_mut() {
+                    Object::CompiledFunction(ins) => {
+                        ins
+                    }
+                    _ => panic!("Current frame does not contain a compiled function!")
+                }
+            }
+            _ => panic!("Current frame not found!")
+        }
+    }
+
+    fn push_frame(&mut self, frame: Frame) -> Result<()> {
+        if self.frames_index > MAX_FRAMES {
+            bail!("Frame stack size exceeded!");
+        }
+
+        self.frames[self.frames_index] = Some(frame);
+        self.frames_index += 1;
+
+        Ok(())
+    }
+
+    fn pop_frame(&mut self) -> Option<Frame> {
+        self.frames_index -= 1;
+
+        std::mem::replace(&mut self.frames[self.frames_index], None)
     }
 }

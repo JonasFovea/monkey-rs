@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use crate::ast::{Parser, Program};
 use crate::compiler::Compiler;
 use crate::lexer::Lexer;
 use crate::object::{HashKey, Object};
 use crate::vm::VM;
+use std::collections::HashMap;
 
 fn parse(input: &str) -> Program {
     let lex = Lexer::new(input).unwrap();
@@ -320,6 +320,65 @@ fn test_index_expressions() {
         VMTestCase::new_int_result_case("{1: 1, 2: 2}[2]", 2),
         VMTestCase::new_null_result_case("{1: 1}[0]"),
         VMTestCase::new_null_result_case("{}[0]"),
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_calling_functions_without_arguments() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("let fivePlusTen = fn(){ 5 + 10;}; fivePlusTen();", 15),
+        VMTestCase::new_int_result_case(
+            "let one = fn(){ 1;}; \
+            one(); \
+            let two = fn(){ 2;}; \
+            two(); \
+            one() + two()",
+            3),
+        VMTestCase::new_int_result_case(
+            "let a = fn(){1;}; \
+            let b = fn(){a() + 1;}; \
+            let c = fn(){b() + 1}; \
+            c();",
+            3)
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_functions_with_return_statement() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("let earlyExit = fn(){return 99; 100;}; earlyExit();", 99),
+        VMTestCase::new_int_result_case("let earlyExit = fn(){return 99; return 100;}; earlyExit();", 99),
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_functions_without_return_value() {
+    let tests = vec![
+        VMTestCase::new_null_result_case("let noReturn = fn(){}; noReturn();"),
+        VMTestCase::new_null_result_case(
+            "let noReturn = fn(){}; \
+            let noReturnTwo = fn(){noReturn();}; \
+            noReturn(); \
+            noReturnTwo();"
+        ),
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_first_class_functions() {
+    let tests = vec![
+        VMTestCase::new_int_result_case(
+            "let returnsOne = fn(){1;}; \
+            let returnsOneReturner = fn(){returnsOne;}; \
+            returnsOneReturner()();", 1)
     ];
 
     run_vm_tests(tests);
