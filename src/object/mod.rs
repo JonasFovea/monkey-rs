@@ -20,7 +20,7 @@ pub enum Object {
     Builtin(String),
     Array(Vec<Object>),
     Hash(HashMap<HashKey, Object>),
-    CompiledFunction(Instructions),
+    CompiledFunction(Instructions, usize, usize),
 }
 
 impl Object {
@@ -35,7 +35,7 @@ impl Object {
             Object::Return(_) => "Return",
             Object::Array(_) => "Array",
             Object::Hash(_) => "Hash",
-            Object::CompiledFunction(_) => "CompiledFunction",
+            Object::CompiledFunction(..) => "CompiledFunction",
         }.to_string()
     }
 
@@ -86,9 +86,9 @@ impl PartialEq for Object {
                     a == b
                 } else { false }
             }
-            Object::CompiledFunction(a) => {
-                if let Object::CompiledFunction(b) = other {
-                    a == b
+            Object::CompiledFunction(a, nla, npa) => {
+                if let Object::CompiledFunction(b, nlb, npb) = other {
+                    a == b && nla == nlb && npa == npb
                 } else { false }
             }
         }
@@ -124,7 +124,7 @@ impl fmt::Display for Object {
                     .collect::<Vec<String>>()
                     .join(", "))
             }
-            Object::CompiledFunction(_) => format!("CompiledFunction[{}]", &self)
+            Object::CompiledFunction(..) => format!("CompiledFunction[{:p}]", &self)
         };
         write!(f, "{}", formatted)
     }
@@ -157,7 +157,7 @@ impl fmt::Debug for Object {
                     .collect::<Vec<String>>()
                     .join(", "))
             }
-            Object::CompiledFunction(ins) => format!("CompiledFunction {{instructions: {:?}}}", ins),
+            Object::CompiledFunction(ins, locals, params) => format!("CompiledFunction {{instructions: {:?}, num_locals: {}, num_params: {}}}", ins, locals, params),
         };
         write!(f, "{}", formatted)
     }

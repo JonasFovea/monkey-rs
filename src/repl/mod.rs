@@ -7,8 +7,8 @@ use anyhow::Context;
 use whoami;
 
 use crate::ast::Parser;
-use crate::compiler::Compiler;
 use crate::compiler::symbol_table::SymbolTable;
+use crate::compiler::Compiler;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
 use crate::object::{Environment, Object};
@@ -93,7 +93,7 @@ pub fn start_compiled_repl() {
                 let mut machine = VM::with_global_store(
                     comp.bytecode()
                         .context("Turning compiled code into bytecode.").unwrap(),
-                    globals.clone()
+                    globals.clone(),
                 );
                 if let Err(e) = machine.run() {
                     eprintln!("Executing bytecode failed:");

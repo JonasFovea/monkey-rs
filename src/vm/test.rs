@@ -11,46 +11,46 @@ fn parse(input: &str) -> Program {
     return parser.parse_program().unwrap();
 }
 
-fn test_integer_object(expected: i64, actual: &Object) {
+fn test_integer_object(expected: i64, actual: &Object, test_no: usize) {
     match actual {
-        Object::Integer(i) => assert_eq!(expected, *i, "Object has wrong value. got={}, want={}", i, expected),
-        _ => assert!(false, "Object is not an Integer! Got {} instead.", actual.type_str())
+        Object::Integer(i) => assert_eq!(expected, *i, "Object in test no {} has wrong value. got={}, want={}", test_no, i, expected),
+        _ => assert!(false, "Object in test no {} is not an Integer! Got {} instead.", test_no, actual.type_str())
     }
 }
 
-fn test_boolean_object(expected: bool, actual: &Object) {
+fn test_boolean_object(expected: bool, actual: &Object, test_no: usize) {
     match actual {
-        Object::Boolean(b) => assert_eq!(expected, *b, "Object has wrong value. got={}, want={}", b, expected),
-        _ => assert!(false, "Object is not a Boolean! Got {} instead.", actual.type_str())
+        Object::Boolean(b) => assert_eq!(expected, *b, "Object in test no {} has wrong value. got={}, want={}", test_no, b, expected),
+        _ => assert!(false, "Object in test no {} is not a Boolean! Got {} instead.", test_no, actual.type_str())
     }
 }
 
-fn test_string_object(expected: &str, actual: &Object) {
+fn test_string_object(expected: &str, actual: &Object, test_no: usize) {
     match actual {
-        Object::String(s) => assert_eq!(expected, s, "Object has wrong value. got={}, want={}", s, expected),
-        _ => assert!(false, "Object is not a string! Got {} instead.", actual.type_str())
+        Object::String(s) => assert_eq!(expected, s, "Object in test no {} has wrong value. got={}, want={}", test_no, s, expected),
+        _ => assert!(false, "Object in test no {} is not a string! Got {} instead.", test_no, actual.type_str())
     }
 }
 
-fn test_array_object(objects: &[Object], actual: &Object) {
+fn test_array_object(objects: &[Object], actual: &Object, test_no: usize) {
     match actual {
         Object::Array(elems) => {
             for (i, (e, a)) in objects.iter().zip(elems).enumerate() {
-                assert_eq!(e, a, "Object at index {} in array is not equal to expected!\nwant={}\n got={}\n", i, e, a);
+                assert_eq!(e, a, "Object in test no {} at index {} in array is not equal to expected!\nwant={}\n got={}\n", test_no, i, e, a);
             }
         }
-        _ => assert!(false, "Object is not an array! Got {} instead.", actual.type_str())
+        _ => assert!(false, "Object in test no {} is not an array! Got {} instead.", test_no, actual.type_str())
     }
 }
 
-fn test_hash_object(expected: &HashMap<HashKey, Object>, actual: &Object) {
+fn test_hash_object(expected: &HashMap<HashKey, Object>, actual: &Object, test_no: usize) {
     match actual {
         Object::Hash(amap) => {
             for (k, v) in expected {
-                assert_eq!(*v, amap[k], "Expected values not equal!\nwant={}\n got={}\n", v, amap[k]);
+                assert_eq!(*v, amap[k], "Expected values in test no {} not equal!\nwant={}\n got={}\n", test_no, v, amap[k]);
             }
         }
-        _ => assert!(false, "Object is not a hash! Got {} instead.", actual.type_str())
+        _ => assert!(false, "Object in test no {} is not a hash! Got {} instead.", test_no, actual.type_str())
     }
 }
 
@@ -96,7 +96,7 @@ impl VMTestCase {
 }
 
 fn run_vm_tests(tests: Vec<VMTestCase>) {
-    for test in tests {
+    for (tst_no, test) in tests.iter().enumerate() {
         let program = parse(&test.input);
         let mut comp = Compiler::new();
         let cmpl_err = comp.compile_program(&program);
@@ -119,18 +119,18 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
         }
         let stack_elem = stack_elem.unwrap();
 
-        test_expected_object(&test.expected, &stack_elem);
+        test_expected_object(&test.expected, &stack_elem, tst_no);
     }
 }
 
-fn test_expected_object(expected: &Object, actual: &Object) {
+fn test_expected_object(expected: &Object, actual: &Object, test_no: usize) {
     match expected {
-        Object::Integer(i) => test_integer_object(*i, actual),
-        Object::Boolean(b) => test_boolean_object(*b, actual),
-        Object::Null => assert_eq!(expected, actual),
-        Object::String(s) => test_string_object(s, actual),
-        Object::Array(obj) => test_array_object(obj, actual),
-        Object::Hash(map) => test_hash_object(map, actual),
+        Object::Integer(i) => test_integer_object(*i, actual, test_no),
+        Object::Boolean(b) => test_boolean_object(*b, actual, test_no),
+        Object::Null => assert_eq!(expected, actual, "Object in test no. {} is not Null!", test_no),
+        Object::String(s) => test_string_object(s, actual, test_no),
+        Object::Array(obj) => test_array_object(obj, actual, test_no),
+        Object::Hash(map) => test_hash_object(map, actual, test_no),
         _ => todo!("Test case not implemented.")
     }
 }
@@ -378,8 +378,96 @@ fn test_first_class_functions() {
         VMTestCase::new_int_result_case(
             "let returnsOne = fn(){1;}; \
             let returnsOneReturner = fn(){returnsOne;}; \
-            returnsOneReturner()();", 1)
+            returnsOneReturner()();", 1),
+        VMTestCase::new_int_result_case(
+            "let returnsOneReturner = fn() {\
+            let returnsOne = fn () { 1; };\
+            returnsOne;\
+            };\
+            returnsOneReturner()();",
+            1
+        )
     ];
 
     run_vm_tests(tests);
+}
+
+#[test]
+fn test_calling_functions_with_bindings() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("let one = fn () { let one = 1; one }; one();", 1),
+        VMTestCase::new_int_result_case("let oneAndTwo = fn () { let one = 1; let two = 2; one + two; }; \
+        oneAndTwo();", 3),
+        VMTestCase::new_int_result_case("let oneAndTwo = fn () { let one = 1; let two = 2; one + two; };\
+        let threeAndFour = fn () { let three = 3; let four = 4; three + four; };\
+        oneAndTwo() + threeAndFour();", 10),
+        VMTestCase::new_int_result_case("let firstFoobar = fn() { let foobar = 50; foobar;}\
+        let secondFoobar = fn() { let foobar = 100; foobar;}\
+        firstFoobar() + secondFoobar();", 150),
+        VMTestCase::new_int_result_case(
+            "let globalSeed = 50;\
+            let minusOne = fn() {\
+            let num = 1;\
+            globalSeed - num;\
+            };\
+            let minusTwo = fn () {\
+            let num = 2;\
+            globalSeed - num;\
+            };\
+            minusOne() + minusTwo();",
+            97
+        )
+    ];
+
+    run_vm_tests(tests);
+}
+
+#[test]
+fn test_calling_functions_with_arguments_and_bindings() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("let identity = fn (a) {a;}; identity(4);", 4),
+        VMTestCase::new_int_result_case("let sum = fn (a, b) { a + b; }; sum(1, 2);", 3),
+        VMTestCase::new_int_result_case("let sum = fn (a, b) { let c = a + b; c;}; sum(1, 2);", 3),
+        VMTestCase::new_int_result_case("let sum = fn (a, b) { let c = a + b; c;}; sum(1, 2) + sum(3 , 4);", 10),
+        VMTestCase::new_int_result_case("let sum = fn (a, b) { let c = a + b; c; }; let outer = fn () { sum(1,2) + sum (3, 4); }; outer();", 10),
+        VMTestCase::new_int_result_case(
+            "let globalNum = 10;\
+            let sum = fn(a, b) {\
+            let c = a + b;\
+            c + globalNum;\
+            };\
+            let outer = fn() {\
+            sum(1, 2) + sum(3, 4) + globalNum;\
+            };\
+            outer() + globalNum;",
+            50)
+    ];
+
+    run_vm_tests(tests)
+}
+
+#[test]
+fn test_calling_functions_with_wrong_arguments() {
+    let tests = vec![
+        ("fn(){1;}(1);", "wrong number of arguments: want=0, got=1"),
+        ("fn(a){a;}();", "wrong number of arguments: want=1, got=0"),
+        ("fn(a, b){ a+b;}(1);", "wrong number of arguments: want=2, got=1")
+    ];
+
+    for (input, expected) in tests {
+        let program = parse(input);
+
+        let mut comp = Compiler::new();
+        if let Err(e) = comp.compile_program(&program) {
+            assert!(false, "Compiler error: {:?}", e);
+        }
+
+        let mut vm = VM::new(comp.bytecode().unwrap());
+        match vm.run() {
+            Ok(_) => assert!(false, "Expected VM error but resulted in none."),
+            Err(e) => {
+                assert_eq!(expected, e.root_cause().to_string());
+            }
+        }
+    }
 }

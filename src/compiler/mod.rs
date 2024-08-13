@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use anyhow::{bail, Context, Result};
 
 use crate::ast::{Expression, ExpressionStatement, LetStatement, Program, ReturnStatement, Statement};
-use crate::code::{Instructions, make, Opcode};
-use crate::compiler::symbol_table::SymbolTable;
+use crate::code::{make, Instructions, Opcode};
+use crate::compiler::symbol_table::{Scope, SymbolTable};
 use crate::object::Object;
 use crate::token::TokenType;
 
@@ -77,8 +77,13 @@ impl Compiler {
                     .expect("Failed to access symbol table")
                     .define(&id.value);
 
-                self.emit(Opcode::OpSetGlobal, vec![symbol.index as u16])
-                    .context("Emitting OpSetGlobal for let statement.")?;
+                if symbol.scope == Scope::GlobalScope {
+                    self.emit(Opcode::OpSetGlobal, vec![symbol.index as u16])
+                        .context("Emitting OpSetGlobal for let statement.")?;
+                } else {
+                    self.emit(Opcode::OpSetLocal, vec![symbol.index as u16])
+                        .context("Emitting OpSetLocal for let statement.")?;
+                }
             }
             Statement::RETURN(ReturnStatement { return_value: val, .. }) => {
                 self.compile_expression(val)
@@ -227,10 +232,15 @@ impl Compiler {
                 let symbol = self.symbol_table.lock()
                     .expect("Failed to access symbol table.")
                     .resolve(&id.value)
-                    .context("Resolving identifier in symbol table.")?;
+                    .with_context(|| format!("Resolving identifier {:?} in symbol table.", &id.value))?;
 
-                self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
-                    .context("Emitting OpGetGlobal to load identifier.")?;
+                if symbol.scope == Scope::GlobalScope {
+                    self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
+                        .context("Emitting OpGetGlobal to load identifier.")?;
+                } else {
+                    self.emit(Opcode::OpGetLocal, vec![symbol.index as u16])
+                        .context("Emitting OpGetLocal to load identifier.")?;
+                }
             }
             Expression::STRING_LITERAL(_, s) => {
                 let string = Object::String(s.clone());
@@ -271,6 +281,10 @@ impl Compiler {
             Expression::FUNCTION(_, params, body) => {
                 self.enter_scope();
 
+                for param in params {
+                    self.symbol_table.lock().expect("Accessing symbol table.").define(&param.value);
+                }
+
                 self.compile_block(&body.statements)
                     .context("Compiling function body.")?;
 
@@ -283,10 +297,14 @@ impl Compiler {
                     self.emit(Opcode::OpReturn, vec![]).context("Emitting return without value.")?;
                 }
 
+                let num_locals = self.symbol_table
+                    .lock().expect("Could not access symbol table!")
+                    .num_definitions;
+
                 let instructions = self.leave_scope()
                     .context("Leaving function scope.")?;
 
-                let compiled_fun = Object::CompiledFunction(instructions);
+                let compiled_fun = Object::CompiledFunction(instructions, num_locals, params.len());
                 let const_idx = self.add_constant(compiled_fun) as u16;
                 self.emit(Opcode::OpConstant, vec![const_idx])
                     .context("Emitting compiled function constant.")?;
@@ -295,7 +313,11 @@ impl Compiler {
                 self.compile_expression(func)
                     .context("Compiling function to call.")?;
 
-                self.emit(Opcode::OpCall, vec![])
+                for (i, arg) in args.iter().enumerate() {
+                    self.compile_expression(arg).with_context(|| format!("Compiling call argument no. {}.", i))?;
+                }
+
+                self.emit(Opcode::OpCall, vec![args.len() as u16])
                     .context("Emitting function call.")?;
             }
             _ => bail!("Expression {:?} can't yet be compiled.", expression)
@@ -412,6 +434,8 @@ impl Compiler {
     fn enter_scope(&mut self) {
         self.scopes.push(CompilationScope::new());
         self.scope_index += 1;
+
+        self.symbol_table = Rc::new(Mutex::new(SymbolTable::new_enclosed(self.symbol_table.clone())));
     }
 
     fn leave_scope(&mut self) -> Result<Instructions> {
@@ -421,6 +445,17 @@ impl Compiler {
         };
 
         self.scope_index -= 1;
+
+        let table = if let Some(outer) = &self.symbol_table
+            .lock()
+            .expect("Could not access outer symbol table")
+            .outer {
+            outer.clone()
+        } else {
+            bail!("No outer symbol table! Cannot leave scope!");
+        };
+
+        self.symbol_table = table;
 
         Ok(instructions)
     }

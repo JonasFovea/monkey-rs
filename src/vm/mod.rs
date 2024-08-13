@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use anyhow::{bail, Context, Result};
 
-use crate::code::{read_uint16, Instructions, Opcode};
+use crate::code::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
 use crate::object::{HashKey, Object};
 use crate::vm::frame::Frame;
@@ -34,8 +34,8 @@ impl VM {
             Bytecode { instructions: ins, constants: cons } => {
                 const NONE: Option<Frame> = None;
                 let mut frames = [NONE; MAX_FRAMES];
-                let main_func = Object::CompiledFunction(ins);
-                let main_frame = Frame::new(main_func).unwrap();
+                let main_func = Object::CompiledFunction(ins, 0, 0);
+                let main_frame = Frame::new(main_func, 0).unwrap();
                 frames[0] = Some(main_frame);
 
                 VM {
@@ -56,8 +56,8 @@ impl VM {
             Bytecode { instructions: ins, constants: cons } => {
                 const NONE: Option<Frame> = None;
                 let mut frames = [NONE; MAX_FRAMES];
-                let main_func = Object::CompiledFunction(ins);
-                let main_frame = Frame::new(main_func).unwrap();
+                let main_func = Object::CompiledFunction(ins, 0, 0);
+                let main_frame = Frame::new(main_func, 0).unwrap();
                 frames[0] = Some(main_frame);
 
                 VM {
@@ -191,28 +191,45 @@ impl VM {
                         .context("Evaluating index expression.")?;
                 }
                 Opcode::OpCall => {
-                    let func = &self.stack[self.sp - 1];
-                    match func {
-                        Object::CompiledFunction(_) => {
-                            self.push_frame(Frame::new(func.clone())
-                                .context("Building new stack frame.")?)
-                                .context("Pushing new stack frame.")?;
-                        }
-                        _ => bail!("Calling non-function.")
-                    }
+                    let num_args = read_uint8(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 1;
+
+                    self.call_function(num_args).context("Calling function.")?;
                 }
                 Opcode::OpReturnValue => {
                     let return_value = self.pop().context("Popping return value.")?;
-                    self.pop_frame();
-                    let _ = self.pop();
+                    let frame = self.pop_frame().context("Popping frame.")?;
+                    // let _ = self.pop();
+
+                    self.sp = frame.base_pointer - 1;
 
                     self.push(return_value).context("Pushing returned value.")?;
                 }
                 Opcode::OpReturn => {
-                    self.pop_frame().context("Popping stack frame after OpReturn.")?;
-                    self.pop().context("Popping stack element after OpReturn.")?;
+                    let frame = self.pop_frame().context("Popping stack frame after OpReturn.")?;
+                    self.sp = frame.base_pointer - 1;
+
+                    // self.pop().context("Popping stack element after OpReturn.")?;
 
                     self.push(Object::Null).context("Pushing Null-Object after OpReturn.")?;
+                }
+                Opcode::OpSetLocal => {
+                    let local_index = read_uint8(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 1;
+
+                    let bp = self.current_frame().base_pointer;
+
+                    self.stack[bp + local_index] = self.pop()
+                        .context("Popping stack element to store as local variable.")?;
+                }
+                Opcode::OpGetLocal => {
+                    let local_index = read_uint8(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 1;
+
+                    let bp = self.current_frame().base_pointer;
+
+                    self.push(self.stack[bp + local_index].clone())
+                        .context("Pushing local variable onto the stack.")?;
                 }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
@@ -418,9 +435,9 @@ impl VM {
 
     fn current_func(&mut self) -> &mut Instructions {
         match self.frames[self.frames_index - 1].as_mut() {
-            Some(Frame { func, ip: _ }) => {
+            Some(Frame { func, ip: _, base_pointer: _ }) => {
                 match func.as_mut() {
-                    Object::CompiledFunction(ins) => {
+                    Object::CompiledFunction(ins, ..) => {
                         ins
                     }
                     _ => panic!("Current frame does not contain a compiled function!")
@@ -445,5 +462,31 @@ impl VM {
         self.frames_index -= 1;
 
         std::mem::replace(&mut self.frames[self.frames_index], None)
+    }
+
+    fn call_function(&mut self, num_args: usize) -> Result<()> {
+        let func = &self.stack[self.sp - 1 - num_args];
+
+        match func {
+            Object::CompiledFunction(_, num_locals, num_params) => {
+                if num_args != *num_params {
+                    bail!("wrong number of arguments: want={}, got={}", num_params, num_args);
+                }
+
+                let frame = Frame::new(func.clone(), self.sp - num_args)
+                    .context("Building new stack frame.")?;
+
+                let new_sp = frame.base_pointer + num_locals;
+
+                self.push_frame(frame
+                )
+                    .context("Pushing new stack frame.")?;
+
+                self.sp = new_sp;
+            }
+            _ => bail!("Calling non-function.")
+        }
+
+        Ok(())
     }
 }

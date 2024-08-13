@@ -56,11 +56,11 @@ impl Instructions {
         }
 
         return
-        match operand_count {
-            0 => format!("{}", definition.name),
-            1 => format!("{} {}", definition.name, operands[0]),
-            _ => format!("ERROR: unhandled operator count for {}", definition.name),
-        };
+            match operand_count {
+                0 => format!("{}", definition.name),
+                1 => format!("{} {}", definition.name, operands[0]),
+                _ => format!("ERROR: unhandled operator count for {}", definition.name),
+            };
     }
 }
 
@@ -99,6 +99,8 @@ pub enum Opcode {
     OpCall,
     OpReturnValue,
     OpReturn,
+    OpGetLocal,
+    OpSetLocal,
 }
 
 impl Into<u8> for Opcode {
@@ -129,6 +131,8 @@ impl Into<u8> for Opcode {
             Opcode::OpCall => 22,
             Opcode::OpReturnValue => 23,
             Opcode::OpReturn => 24,
+            Opcode::OpGetLocal => 25,
+            Opcode::OpSetLocal => 26,
         }
     }
 }
@@ -226,7 +230,7 @@ impl Into<Definition> for Opcode {
             },
             Opcode::OpCall => Definition {
                 name: "OpCall".to_string(),
-                operand_widths: vec![],
+                operand_widths: vec![1],
             },
             Opcode::OpReturnValue => Definition {
                 name: "OpReturnValue".to_string(),
@@ -235,7 +239,15 @@ impl Into<Definition> for Opcode {
             Opcode::OpReturn => Definition {
                 name: "OpReturn".to_string(),
                 operand_widths: vec![],
-            }
+            },
+            Opcode::OpGetLocal => Definition {
+                name: "OpGetLocal".to_string(),
+                operand_widths: vec![1],
+            },
+            Opcode::OpSetLocal => Definition {
+                name: "OpSetLocal".to_string(),
+                operand_widths: vec![1],
+            },
         }
     }
 }
@@ -270,6 +282,8 @@ impl TryFrom<u8> for Opcode {
             22 => Ok(Opcode::OpCall),
             23 => Ok(Opcode::OpReturnValue),
             24 => Ok(Opcode::OpReturn),
+            25 => Ok(Opcode::OpGetLocal),
+            26 => Ok(Opcode::OpSetLocal),
             _ => bail!("opcode {} undefined", value),
         }
     }
@@ -303,6 +317,7 @@ pub fn make(op: Opcode, operands: Vec<u16>) -> Result<Instructions> {
         let width = def.operand_widths[i];
         match width {
             2 => { instruction.extend_from_slice(&o.to_be_bytes()) }
+            1 => { instruction.push(*o as u8) }
             _ => bail!("Operand width not supported: {}", width),
         }
     }
@@ -319,6 +334,9 @@ pub fn read_operands(definition: Definition, instructions: Instructions) -> (Vec
             2 => {
                 operands.insert(i, read_uint16(&instructions.0[offset..]));
             }
+            1 => {
+                operands.insert(i, read_uint8(&instructions.0[offset..]));
+            }
             _ => {}
         }
         offset += width;
@@ -329,4 +347,8 @@ pub fn read_operands(definition: Definition, instructions: Instructions) -> (Vec
 
 pub(crate) fn read_uint16(bytes: &[u8]) -> u16 {
     u16::from_be_bytes([bytes[0], bytes[1]])
+}
+
+pub(crate) fn read_uint8(bytes: &[u8]) -> u16 {
+    u16::from_be_bytes([0, bytes[0]])
 }

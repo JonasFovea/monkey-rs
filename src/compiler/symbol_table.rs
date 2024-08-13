@@ -1,14 +1,17 @@
 use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::Mutex;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum Scope {
-    GlobalScope
+    GlobalScope,
+    LocalScope,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub(crate) struct Symbol {
     pub(crate) name: String,
-    scope: Scope,
+    pub(crate) scope: Scope,
     pub(crate) index: usize,
 }
 
@@ -25,7 +28,8 @@ impl Symbol {
 #[derive(Debug, Clone)]
 pub(crate) struct SymbolTable {
     store: HashMap<String, Symbol>,
-    num_definitions: usize,
+    pub(crate) num_definitions: usize,
+    pub(crate) outer: Option<Rc<Mutex<SymbolTable>>>,
 }
 
 impl SymbolTable {
@@ -33,11 +37,22 @@ impl SymbolTable {
         SymbolTable {
             store: HashMap::new(),
             num_definitions: 0,
+            outer: None,
+        }
+    }
+
+    pub fn new_enclosed(outer: Rc<Mutex<SymbolTable>>) -> Self {
+        SymbolTable {
+            store: HashMap::new(),
+            num_definitions: 0,
+            outer: Some(outer),
         }
     }
 
     pub fn define(&mut self, name: &str) -> Symbol {
-        let symbol = Symbol::new(name, Scope::GlobalScope, self.num_definitions);
+        let scope = if self.outer.is_none() { Scope::GlobalScope } else { Scope::LocalScope };
+
+        let symbol = Symbol::new(name, scope, self.num_definitions);
         self.store.insert(name.to_string(), symbol.clone());
         self.num_definitions += 1;
         symbol
@@ -46,6 +61,8 @@ impl SymbolTable {
     pub fn resolve(&self, name: &str) -> Option<Symbol> {
         if let Some(s) = self.store.get(name) {
             Some(s.clone())
+        } else if let Some(o) = &self.outer {
+            o.lock().unwrap().resolve(name)
         } else {
             None
         }
