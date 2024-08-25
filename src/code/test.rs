@@ -7,7 +7,8 @@ fn test_make() {
     let tests = vec![
         (Opcode::OpConstant, vec![65534], vec![Opcode::OpConstant.into(), 255, 254]),
         (Opcode::OpAdd, vec![], vec![Opcode::OpAdd.into()]),
-        (Opcode::OpGetLocal, vec![255], vec![Opcode::OpGetLocal.into(), 255])
+        (Opcode::OpGetLocal, vec![255], vec![Opcode::OpGetLocal.into(), 255]),
+        (Opcode::OpClosure, vec![65534, 255], vec![Opcode::OpClosure.into(), 255, 254, 255])
     ];
 
     for (op, operands, expected) in tests {
@@ -35,9 +36,10 @@ fn test_instructions_string() {
         make(Opcode::OpGetLocal, vec![1]).unwrap(),
         make(Opcode::OpConstant, vec![2]).unwrap(),
         make(Opcode::OpConstant, vec![65535]).unwrap(),
+        make(Opcode::OpClosure, vec![65535, 255]).unwrap()
     ]);
 
-    let expected = "0000 OpAdd\n0001 OpGetLocal 1\n0003 OpConstant 2\n0006 OpConstant 65535\n";
+    let expected = "0000 OpAdd\n0001 OpGetLocal 1\n0003 OpConstant 2\n0006 OpConstant 65535\n0009 OpClosure 65535 255\n";
     assert_eq!(expected, instructions.to_string().unwrap(), "Instructions wrongly formatted.\nwant={:?}\n got={:?}",
                expected, instructions.to_string().unwrap());
 }

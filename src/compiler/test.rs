@@ -16,7 +16,10 @@ struct CompilerTestCase {
 
 #[test]
 fn test_read_operands() {
-    let tests = vec![(Opcode::OpConstant, vec![65535], 2)];
+    let tests = vec![
+        (Opcode::OpConstant, vec![65535], 2),
+        (Opcode::OpClosure, vec![65535, 255], 3)
+    ];
 
     for (op, operands, bytes_read) in tests {
         let instruction = make(op, operands.clone()).unwrap();
@@ -501,15 +504,15 @@ fn test_functions() {
             expected_constants: vec![
                 Object::Integer(5),
                 Object::Integer(10),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpConstant, vec![0]).unwrap(),
                     make(Opcode::OpConstant, vec![1]).unwrap(),
                     make(Opcode::OpAdd, vec![]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap(),
-                ]), 0, 0),
+                ]), 0, 0, vec![]),
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpClosure, vec![2, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
@@ -518,15 +521,15 @@ fn test_functions() {
             expected_constants: vec![
                 Object::Integer(5),
                 Object::Integer(10),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpConstant, vec![0]).unwrap(),
                     make(Opcode::OpConstant, vec![1]).unwrap(),
                     make(Opcode::OpAdd, vec![]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap(),
-                ]), 0, 0),
+                ]), 0, 0, vec![]),
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpClosure, vec![2, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
@@ -535,15 +538,15 @@ fn test_functions() {
             expected_constants: vec![
                 Object::Integer(1),
                 Object::Integer(2),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpConstant, vec![0]).unwrap(),
                     make(Opcode::OpPop, vec![]).unwrap(),
                     make(Opcode::OpConstant, vec![1]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap(),
-                ]), 0, 0),
+                ]), 0, 0, vec![]),
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpClosure, vec![2, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         },
@@ -606,10 +609,10 @@ fn test_functions_without_return_value() {
         CompilerTestCase {
             input: "fn () {}".to_string(),
             expected_constants: vec![
-                Object::CompiledFunction(make(Opcode::OpReturn, vec![]).unwrap(), 0, 0)
+                Object::Closure(make(Opcode::OpReturn, vec![]).unwrap(), 0, 0, vec![])
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpClosure, vec![0, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
         }
@@ -625,16 +628,16 @@ fn test_function_calls() {
             input: "fn () { 24 }()".to_string(),
             expected_constants: vec![
                 Object::Integer(24),
-                Object::CompiledFunction(
+                Object::Closure(
                     Instructions::join(vec![
                         make(Opcode::OpConstant, vec![0]).unwrap(),
                         make(Opcode::OpReturnValue, vec![]).unwrap(),
                     ]),
-                    0, 0
+                    0, 0, vec![]
                 ),
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
                 make(Opcode::OpCall, vec![0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ],
@@ -643,16 +646,16 @@ fn test_function_calls() {
             input: "let noArg = fn () { 24 }; noArg();".to_string(),
             expected_constants: vec![
                 Object::Integer(24),
-                Object::CompiledFunction(
+                Object::Closure(
                     Instructions::join(vec![
                         make(Opcode::OpConstant, vec![0]).unwrap(),
                         make(Opcode::OpReturnValue, vec![]).unwrap(),
                     ]),
-                    0, 0
+                    0, 0, vec![]
                 ),
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
                 make(Opcode::OpSetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpGetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpCall, vec![0]).unwrap(),
@@ -661,13 +664,14 @@ fn test_function_calls() {
         },
         CompilerTestCase {
             input: "let oneArg = fn(a) {a;}; oneArg(24);".to_string(),
-            expected_constants: vec![Object::CompiledFunction(Instructions::join(vec![
-                make(Opcode::OpGetLocal, vec![0]).unwrap(),
-                make(Opcode::OpReturnValue, vec![]).unwrap()
-            ]), 0, 1),
-                                     Object::Integer(24)],
+            expected_constants: vec![
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 0, 1, vec![]),
+                Object::Integer(24)],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpClosure, vec![0, 0]).unwrap(),
                 make(Opcode::OpSetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpGetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpConstant, vec![1]).unwrap(),
@@ -678,7 +682,7 @@ fn test_function_calls() {
         CompilerTestCase {
             input: "let manyArg = fn (a,b,c) {a; b; c;}; manyArg(24, 25, 26);".to_string(),
             expected_constants: vec![
-                Object::CompiledFunction(
+                Object::Closure(
                     Instructions::join(vec![
                         make(Opcode::OpGetLocal, vec![0]).unwrap(),
                         make(Opcode::OpPop, vec![]).unwrap(),
@@ -686,10 +690,10 @@ fn test_function_calls() {
                         make(Opcode::OpPop, vec![]).unwrap(),
                         make(Opcode::OpGetLocal, vec![2]).unwrap(),
                         make(Opcode::OpReturnValue, vec![]).unwrap()
-                    ]), 0, 3),
+                    ]), 0, 3, vec![]),
                 Object::Integer(24), Object::Integer(25), Object::Integer(26)],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpClosure, vec![0, 0]).unwrap(),
                 make(Opcode::OpSetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpGetGlobal, vec![0]).unwrap(),
                 make(Opcode::OpConstant, vec![1]).unwrap(),
@@ -711,14 +715,14 @@ fn test_let_statement_scopes() {
             input: "let num = 55; fn() {num}".to_string(),
             expected_constants: vec![
                 Object::Integer(55),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpGetGlobal, vec![0]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap()
-                ]), 0, 0)],
+                ]), 0, 0, vec![])],
             expected_instructions: vec![
                 make(Opcode::OpConstant, vec![0]).unwrap(),
                 make(Opcode::OpSetGlobal, vec![0]).unwrap(),
-                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap()
             ]
         },
@@ -726,14 +730,14 @@ fn test_let_statement_scopes() {
             input: "fn() {let num = 55; num}".to_string(),
             expected_constants: vec![
                 Object::Integer(55),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpConstant, vec![0]).unwrap(),
                     make(Opcode::OpSetLocal, vec![0]).unwrap(),
                     make(Opcode::OpGetLocal, vec![0]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap()
-                ]), 0, 0)],
+                ]), 0, 0, vec![])],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![1]).unwrap(),
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap(),
             ]
         },
@@ -742,7 +746,7 @@ fn test_let_statement_scopes() {
             expected_constants: vec![
                 Object::Integer(55),
                 Object::Integer(77),
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpConstant, vec![0]).unwrap(),
                     make(Opcode::OpSetLocal, vec![0]).unwrap(),
                     make(Opcode::OpConstant, vec![1]).unwrap(),
@@ -751,10 +755,10 @@ fn test_let_statement_scopes() {
                     make(Opcode::OpGetLocal, vec![1]).unwrap(),
                     make(Opcode::OpAdd, vec![]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap()
-                ]), 0, 0)
+                ]), 0, 0, vec![])
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpClosure, vec![2, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap()
             ]
         }
@@ -784,15 +788,15 @@ fn test_builtins() {
         CompilerTestCase {
             input: "fn() { len([]) }".to_string(),
             expected_constants: vec![
-                Object::CompiledFunction(Instructions::join(vec![
+                Object::Closure(Instructions::join(vec![
                     make(Opcode::OpGetBuiltin, vec![0]).unwrap(),
                     make(Opcode::OpArray, vec![0]).unwrap(),
                     make(Opcode::OpCall, vec![1]).unwrap(),
                     make(Opcode::OpReturnValue, vec![]).unwrap()
-                ]), 0, 0)
+                ]), 0, 0, vec![])
             ],
             expected_instructions: vec![
-                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpClosure, vec![0, 0]).unwrap(),
                 make(Opcode::OpPop, vec![]).unwrap()
             ]
         }
@@ -829,8 +833,106 @@ fn test_resolve_builtins() {
     }
 }
 
+#[test]
+fn test_closures() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "fn(a){ fn(b) { a + b }".to_string(),
+            expected_constants: vec![
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetFree, vec![0]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 1, 0, vec![]),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpClosure, vec![0, 1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 1, 0, vec![])
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        },
+        CompilerTestCase {
+            input: "fn(a){ fn(b){ fn(c){ a + b + c }}};".to_string(),
+            expected_constants: vec![
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetFree, vec![0]).unwrap(),
+                    make(Opcode::OpGetFree, vec![1]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ]), 1, 0, vec![]),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetFree, vec![0]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpClosure, vec![0, 2]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ]), 1, 0, vec![]),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpClosure, vec![1, 1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ]), 1, 0, vec![]),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpClosure, vec![2, 0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        },
+        CompilerTestCase {
+            input: "let global = 55; fn(){ let a = 66; fn(){ let b = 77; fn(){ let c = 88; global + a + b + c;}}}".to_string(),
+            expected_constants: vec![
+                Object::Integer(55),
+                Object::Integer(66),
+                Object::Integer(77),
+                Object::Integer(88),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![3]).unwrap(),
+                    make(Opcode::OpSetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                    make(Opcode::OpGetFree, vec![0]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpGetFree, vec![1]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpAdd, vec![]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ]), 1, 0, vec![]),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![2]).unwrap(),
+                    make(Opcode::OpSetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpGetFree, vec![0]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpClosure, vec![4, 2]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap(),
+                ]), 1, 0, vec![]),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpConstant, vec![1]).unwrap(),
+                    make(Opcode::OpSetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpClosure, vec![5, 1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 1, 0, vec![]),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpClosure, vec![6, 0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        }
+    ];
+
+    run_compiler_tests(tests);
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
-    for test in tests {
+    for (i, test) in tests.iter().enumerate() {
         let program = parse(&test.input);
         let mut compiler = Compiler::new();
         let res = compiler.compile_program(&program);
@@ -841,12 +943,12 @@ fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
         let bytecode = compiler.bytecode();
         if bytecode.is_err() {
             assert!(false, "No bytecode generated: {:?}\nwant={:?}\n", &compiler,
-                    Instructions::join(test.expected_instructions).to_string().unwrap());
+                    Instructions::join(test.expected_instructions.clone()).to_string().unwrap());
         }
         let bytecode = bytecode.unwrap();
 
-        test_instructions(test.expected_instructions.clone(), bytecode.instructions.clone());
-        test_constants(test.expected_constants.clone(), bytecode.constants.clone());
+        test_instructions(test.expected_instructions.clone(), bytecode.instructions.clone(), i);
+        test_constants(test.expected_constants.clone(), bytecode.constants.clone(), i);
     }
 }
 
@@ -870,20 +972,20 @@ fn test_string_object(expected: &str, actual: &Object) {
     }
 }
 
-fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
+fn test_instructions(expected: Vec<Instructions>, actual: Instructions, test_case: usize) {
     let concatted = Instructions::join(expected.clone());
     assert_eq!(concatted.len(), actual.len(),
-               "Wrong instruction length.\nwant={:?}\n got={:?}",
+               "Wrong instruction length for test no {}.\nwant={:?}\n got={:?}", test_case,
                &concatted.to_string().unwrap(), &actual.to_string().unwrap());
 
     for (i, (e, a)) in concatted.0.iter().zip(&actual.0).enumerate() {
         assert_eq!(*e, *a,
-                   "Instruction {} does not match!\nwant={} ({:?})\n got={} ({:?})\nInstructions:\n\twant={:?}\n\t got={:?}\n",
-                   i, e, Opcode::try_from(*e).unwrap(), a, Opcode::try_from(*a).unwrap(), actual.to_string().unwrap(), concatted.to_string().unwrap());
+                   "Instruction {} for test no {} does not match!\nwant={} ({:?})\n got={} ({:?})\nInstructions:\n\twant={:?}\n\t got={:?}\n",
+                   i, test_case, e, Opcode::try_from(*e).unwrap(), a, Opcode::try_from(*a).unwrap(), actual.to_string().unwrap(), concatted.to_string().unwrap());
     }
 }
 
-fn test_constants(expected: Vec<Object>, actual: Vec<Object>) {
+fn test_constants(expected: Vec<Object>, actual: Vec<Object>, test_case: usize) {
     assert_eq!(expected.len(), actual.len());
 
     for (e, a) in expected.iter().zip(actual) {
@@ -897,12 +999,20 @@ fn test_constants(expected: Vec<Object>, actual: Vec<Object>) {
             Object::CompiledFunction(ie, ..) => {
                 match a {
                     Object::CompiledFunction(ia, ..) => {
-                        test_instructions(vec![ie.clone()], ia);
+                        test_instructions(vec![ie.clone()], ia, test_case);
                     }
-                    _ => assert!(false, "Object is not a CompiledFunction! Got {} instead.", a.type_str())
+                    _ => assert!(false, "Object for test no {} is not a CompiledFunction! Got {} instead.", test_case, a.type_str())
                 }
             }
-            _ => { assert!(false, "Constants can't be compared.") }
+            Object::Closure(ie, ..) => {
+                match a {
+                    Object::Closure(ia, ..) => {
+                        test_instructions(vec![ie.clone()], ia, test_case);
+                    }
+                    _ => assert!(false, "Object for test no {} is not a Closure! Got {} instead.", test_case, a.type_str())
+                }
+            }
+            _ => { assert!(false, "Constants for test no {} can't be compared.", test_case) }
         }
     }
 }

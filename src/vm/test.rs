@@ -536,3 +536,39 @@ fn test_builtin_functions() {
 
     run_vm_tests(tests)
 }
+
+#[test]
+fn test_closures() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("let newClosure = fn(a){ fn(){a;};}; let closure = newClosure(99); closure();", 99),
+        VMTestCase::new_int_result_case("let newAdder = fn(a, b){ fn(c){ a + b + c;};}; let adder = newAdder(1, 2); adder(8);", 11),
+        VMTestCase::new_int_result_case("let newAdder = fn(a, b){ let c = a + b; fn(d){c + d;}; }; let adder = newAdder(1, 2); adder(8);", 11),
+        VMTestCase::new_int_result_case(
+            "let newAdderOuter = fn(a, b){\
+            let c = a + b;\
+            fn(d){\
+            let e = d + c;\
+            fn(f){\
+            e + f;\
+            };\
+            };\
+            };\
+            let newAdderInner = newAdderOuter(1, 2);\
+            let adder = newAdderInner(3);\
+            adder(8);",
+            14),
+        VMTestCase::new_int_result_case(
+            "let a = 1;\
+            let newAdderOuter = fn(b){\
+            fn(c){
+            fn(d){ a + b + c + d };
+            };
+            };
+            let newAdderInner = newAdderOuter(2);
+            let adder = newAdderInner(3);
+            adder(8);",
+            14),
+    ];
+
+    run_vm_tests(tests)
+}

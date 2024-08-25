@@ -55,12 +55,13 @@ impl Instructions {
             return format!("ERROR: operand len {} does not match defined {}\n", operands.len(), operand_count);
         }
 
-        return
-            match operand_count {
-                0 => format!("{}", definition.name),
-                1 => format!("{} {}", definition.name, operands[0]),
-                _ => format!("ERROR: unhandled operator count for {}", definition.name),
-            };
+
+        match operand_count {
+            0 => format!("{}", definition.name),
+            1 => format!("{} {}", definition.name, operands[0]),
+            2 => format!("{} {} {}", definition.name, operands[0], operands[1]),
+            _ => format!("ERROR: unhandled operator count for {}", definition.name),
+        }
     }
 }
 
@@ -102,6 +103,8 @@ pub enum Opcode {
     OpGetLocal,
     OpSetLocal,
     OpGetBuiltin,
+    OpClosure,
+    OpGetFree,
 }
 
 impl Into<u8> for Opcode {
@@ -135,6 +138,8 @@ impl Into<u8> for Opcode {
             Opcode::OpGetLocal => 25,
             Opcode::OpSetLocal => 26,
             Opcode::OpGetBuiltin => 27,
+            Opcode::OpClosure => 28,
+            Opcode::OpGetFree => 29,
         }
     }
 }
@@ -253,7 +258,15 @@ impl Into<Definition> for Opcode {
             Opcode::OpGetBuiltin => Definition {
                 name: "OpGetBuiltin".to_string(),
                 operand_widths: vec![1],
-            }
+            },
+            Opcode::OpClosure => Definition {
+                name: "OpClosure".to_string(),
+                operand_widths: vec![2, 1],
+            },
+            Opcode::OpGetFree => Definition {
+                name: "OpGetFree".to_string(),
+                operand_widths: vec![1],
+            },
         }
     }
 }
@@ -291,6 +304,8 @@ impl TryFrom<u8> for Opcode {
             25 => Ok(Opcode::OpGetLocal),
             26 => Ok(Opcode::OpSetLocal),
             27 => Ok(Opcode::OpGetBuiltin),
+            28 => Ok(Opcode::OpClosure),
+            29 => Ok(Opcode::OpGetFree),
             _ => bail!("opcode {} undefined", value),
         }
     }

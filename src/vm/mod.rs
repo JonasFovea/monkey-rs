@@ -35,7 +35,7 @@ impl VM {
             Bytecode { instructions: ins, constants: cons } => {
                 const NONE: Option<Frame> = None;
                 let mut frames = [NONE; MAX_FRAMES];
-                let main_func = Object::CompiledFunction(ins, 0, 0);
+                let main_func = Object::Closure(ins, 0, 0, vec![]);
                 let main_frame = Frame::new(main_func, 0).unwrap();
                 frames[0] = Some(main_frame);
 
@@ -57,7 +57,7 @@ impl VM {
             Bytecode { instructions: ins, constants: cons } => {
                 const NONE: Option<Frame> = None;
                 let mut frames = [NONE; MAX_FRAMES];
-                let main_func = Object::CompiledFunction(ins, 0, 0);
+                let main_func = Object::Closure(ins, 0, 0, vec![]);
                 let main_frame = Frame::new(main_func, 0).unwrap();
                 frames[0] = Some(main_frame);
 
@@ -239,6 +239,39 @@ impl VM {
                     let definition = object::BUILTINS[builtin_index];
                     self.push(Object::Builtin(definition.to_string()))
                         .context("Pushing builtin function.")?;
+                }
+                Opcode::OpClosure => {
+                    let const_index = read_uint16(&self.current_func().0[ip + 1..]) as usize;
+                    let num_free = read_uint8(&self.current_func().0[ip + 3..]) as usize;
+
+                    self.current_frame().ip += 3;
+
+                    let constant = self.constants[const_index].clone();
+
+                    if let Object::Closure(ins, num_locals, num_params, _) = &constant {
+                        let mut frees = Vec::with_capacity(num_free);
+                        for i in 0..num_free {
+                            frees.push(self.stack[self.sp - num_free + i].clone());
+                        }
+                        self.sp -= num_free;
+
+                        self.push(Object::Closure(ins.clone(), *num_locals, *num_params, frees))
+                            .context("Pushing Closure.")?;
+                    } else {
+                        bail!("Failed to load constant Closure. Got {:?} instead.", constant);
+                    }
+                }
+                Opcode::OpGetFree => {
+                    let free_index = read_uint8(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 1;
+
+                    let current_closure = &self.current_frame().func.clone();
+
+                    if let Object::Closure(.., frees) = current_closure.as_ref() {
+                        self.push(frees[free_index].clone()).context("Pushing free value.")?
+                    } else {
+                        bail!("Expected current frame to contain a Closure, got {:?} instead", current_closure)
+                    }
                 }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
@@ -446,7 +479,7 @@ impl VM {
         match self.frames[self.frames_index - 1].as_mut() {
             Some(Frame { func, ip: _, base_pointer: _ }) => {
                 match func.as_mut() {
-                    Object::CompiledFunction(ins, ..) => {
+                    Object::Closure(ins, ..) => {
                         ins
                     }
                     _ => panic!("Current frame does not contain a compiled function!")
@@ -477,7 +510,7 @@ impl VM {
         let func = &self.stack[self.sp - 1 - num_args];
 
         match func {
-            Object::CompiledFunction(_, num_locals, num_params) => {
+            Object::Closure(_, num_locals, num_params, _) => {
                 if num_args != *num_params {
                     bail!("wrong number of arguments: want={}, got={}", num_params, num_args);
                 }

@@ -12,12 +12,12 @@ pub(crate) struct Frame {
 impl Frame {
     pub(crate) fn new(func: Object, base_pointer: usize) -> Result<Self> {
         match func {
-            Object::CompiledFunction(..) => Ok(Frame {
+            Object::Closure(..) => Ok(Frame {
                 func: Box::new(func),
                 ip: -1,
                 base_pointer,
             }),
-            _ => bail!("Expected object of type CompiledFunction! Got {} instead!", func.type_str())
+            _ => bail!("Expected object of type Closure! Got {} instead!", func.type_str())
         }
     }
 }

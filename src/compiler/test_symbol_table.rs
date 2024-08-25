@@ -108,7 +108,7 @@ fn test_resolve_nested_local() {
     let second_local = Rc::new(Mutex::new(second_local));
 
     let tests = vec![
-        (second_local.clone(), HashMap::from([
+        (first_local.clone(), HashMap::from([
             ("a".to_string(), Symbol::new("a", Scope::GlobalScope, 0)),
             ("b".to_string(), Symbol::new("b", Scope::GlobalScope, 1)),
             ("c".to_string(), Symbol::new("c", Scope::LocalScope, 0)),
@@ -127,6 +127,99 @@ fn test_resolve_nested_local() {
             if let Some(s) = table.lock().unwrap().resolve(&sym.name) {
                 assert_eq!(sym, s, "expected {} to resolve to {:?}, got {:?}", sym.name, sym, s);
             } else { assert!(false, "Unable to resolve symbol: {:?}", sym); }
+        }
+    }
+}
+
+#[test]
+fn test_resolve_free() {
+    let mut global = SymbolTable::new();
+    global.define("a");
+    global.define("b");
+    let global = Rc::new(Mutex::new(global));
+
+    let mut first_local = SymbolTable::new_enclosed(global.clone());
+    first_local.define("c");
+    first_local.define("d");
+    let first_local = Rc::new(Mutex::new(first_local));
+
+    let mut second_local = SymbolTable::new_enclosed(first_local.clone());
+    second_local.define("e");
+    second_local.define("f");
+    let second_local = Rc::new(Mutex::new(second_local));
+
+    let tests = vec![
+        (first_local, vec![
+            Symbol::new("a", Scope::GlobalScope, 0),
+            Symbol::new("b", Scope::GlobalScope, 1),
+            Symbol::new("c", Scope::LocalScope, 0),
+            Symbol::new("d", Scope::LocalScope, 1),
+        ], vec![]),
+        (second_local, vec![
+            Symbol::new("a", Scope::GlobalScope, 0),
+            Symbol::new("b", Scope::GlobalScope, 1),
+            Symbol::new("c", Scope::FreeScope, 0),
+            Symbol::new("d", Scope::FreeScope, 1),
+            Symbol::new("e", Scope::LocalScope, 0),
+            Symbol::new("f", Scope::LocalScope, 1),
+        ], vec![
+            Symbol::new("c", Scope::LocalScope, 0),
+            Symbol::new("d", Scope::LocalScope, 1),
+        ]),
+    ];
+
+    for (table, expected_symbols, expected_free_symbols) in tests {
+        for exp_sym in expected_symbols {
+            if let Some(sym) = table.lock().unwrap().resolve(&exp_sym.name) {
+                assert_eq!(exp_sym, sym, "Expected {:?} to resolve to {:?}, got={:?}", &exp_sym.name, exp_sym, sym);
+            } else { assert!(false, "Symbol {:?} not resolvable.", &exp_sym.name); }
+        }
+
+        assert_eq!(expected_free_symbols.len(), table.lock().unwrap().free_symbols.len(),
+                   "wrong number of free symbols. got={}, want={}",
+                   table.lock().unwrap().free_symbols.len(),
+                   expected_free_symbols.len());
+
+        for (i, sym) in expected_free_symbols.iter().enumerate() {
+            let result = &table.lock().unwrap().free_symbols[i];
+            assert_eq!(*result, *sym, "wrong free symbol. got={:?}, want={:?}", *sym, *result);
+        }
+    }
+}
+
+#[test]
+fn test_unresolvable_free() {
+    let mut global = SymbolTable::new();
+    global.define("a");
+    let global = Rc::new(Mutex::new(global));
+
+    let mut first_local = SymbolTable::new_enclosed(global.clone());
+    first_local.define("c");
+    let first_local = Rc::new(Mutex::new(first_local));
+
+    let mut second_local = SymbolTable::new_enclosed(first_local.clone());
+    second_local.define("e");
+    second_local.define("f");
+    let second_local = Rc::new(Mutex::new(second_local));
+
+    let expected = vec![
+        Symbol::new("a", Scope::GlobalScope, 0),
+        Symbol::new("c", Scope::FreeScope, 0),
+        Symbol::new("e", Scope::LocalScope, 0),
+        Symbol::new("f", Scope::LocalScope, 1),
+    ];
+
+    for exp_sym in expected {
+        if let Some(sym) = second_local.lock().unwrap().resolve(&exp_sym.name) {
+            assert_eq!(exp_sym, sym, "expected {:?} to resolve to {:?}, got={:?}", exp_sym.name, exp_sym, sym);
+        } else { assert!(false, "{:?} not resolvable", exp_sym.name) }
+    }
+
+    let expected_unresolvable = vec!["b", "d"];
+
+    for name in expected_unresolvable {
+        if let Some(_) = second_local.lock().unwrap().resolve(name) {
+            assert!(false, "name {name} resolved, but was expected not to");
         }
     }
 }

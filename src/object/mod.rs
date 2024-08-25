@@ -8,6 +8,7 @@ use crate::ast::{BlockStatement, Identifier};
 use crate::code::Instructions;
 use anyhow::{bail, Context, Result};
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub enum Object {
     Integer(i64),
@@ -19,7 +20,8 @@ pub enum Object {
     Builtin(String),
     Array(Vec<Object>),
     Hash(HashMap<HashKey, Object>),
-    CompiledFunction(Instructions, usize, usize),
+    CompiledFunction(Instructions, usize, usize), // instructions, num_locals, num_params
+    Closure(Instructions, usize, usize, Vec<Object>), // instructions, num_locals, num_params, frees
 }
 
 impl Object {
@@ -35,6 +37,7 @@ impl Object {
             Object::Array(_) => "Array",
             Object::Hash(_) => "Hash",
             Object::CompiledFunction(..) => "CompiledFunction",
+            Object::Closure(..) => "Closure"
         }.to_string()
     }
 
@@ -90,6 +93,9 @@ impl PartialEq for Object {
                     a == b && nla == nlb && npa == npb
                 } else { false }
             }
+            Object::Closure(insa, nla, npa, fra) => if let Object::Closure(insb, nlb, npb, frb) = other {
+                insa == insb && nla == nlb && npa == npb && fra == frb
+            } else { false }
         }
     }
 
@@ -123,7 +129,8 @@ impl fmt::Display for Object {
                     .collect::<Vec<String>>()
                     .join(", "))
             }
-            Object::CompiledFunction(..) => format!("CompiledFunction[{:p}]", &self)
+            Object::CompiledFunction(..) => format!("CompiledFunction[{:p}]", &self),
+            Object::Closure(..) => format!("Closure[{:p}]", &self),
         };
         write!(f, "{}", formatted)
     }
@@ -157,6 +164,7 @@ impl fmt::Debug for Object {
                     .join(", "))
             }
             Object::CompiledFunction(ins, locals, params) => format!("CompiledFunction {{instructions: {:?}, num_locals: {}, num_params: {}}}", ins, locals, params),
+            Object::Closure(ins, locals, params, frees) => format!("Closure {{ instructions: {:?}, num_locals: {}, num_params: {}, free variables: {:?}}}", ins, locals, params, frees),
         };
         write!(f, "{}", formatted)
     }
@@ -215,7 +223,7 @@ impl Environment {
     }
 }
 
-impl std::cmp::PartialEq for Environment {
+impl PartialEq for Environment {
     fn eq(&self, other: &Self) -> bool {
         self.store == other.store && if let (Some(a), Some(b)) = (&self.outer, &other.outer) {
             Rc::ptr_eq(a, b)

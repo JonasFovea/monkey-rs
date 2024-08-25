@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::ast::{Expression, ExpressionStatement, LetStatement, Program, ReturnStatement, Statement};
 use crate::code::{make, Instructions, Opcode};
-use crate::compiler::symbol_table::{Scope, SymbolTable};
+use crate::compiler::symbol_table::{Scope, Symbol, SymbolTable};
 use crate::object::{Object, BUILTINS};
 use crate::token::TokenType;
 
@@ -239,20 +239,8 @@ impl Compiler {
                     .resolve(&id.value)
                     .with_context(|| format!("Resolving identifier {:?} in symbol table.", &id.value))?;
 
-                match symbol.scope {
-                    Scope::GlobalScope => {
-                        self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
-                            .context("Emitting OpGetGlobal to load identifier.")?;
-                    }
-                    Scope::BuiltinScope => {
-                        self.emit(Opcode::OpGetBuiltin, vec![symbol.index as u16])
-                            .context("Emitting OpGetBuiltin to load identifier.")?;
-                    }
-                    Scope::LocalScope => {
-                        self.emit(Opcode::OpGetLocal, vec![symbol.index as u16])
-                            .context("Emitting OpGetLocal to load identifier.")?;
-                    }
-                }
+                self.load_symbol(&symbol)
+                    .context("Emitting load instruction for identifier.")?;
             }
             Expression::STRING_LITERAL(_, s) => {
                 let string = Object::String(s.clone());
@@ -309,6 +297,9 @@ impl Compiler {
                     self.emit(Opcode::OpReturn, vec![]).context("Emitting return without value.")?;
                 }
 
+                let free_symbols = self.symbol_table
+                    .lock().expect("Could not access symbol table!")
+                    .free_symbols.clone();
                 let num_locals = self.symbol_table
                     .lock().expect("Could not access symbol table!")
                     .num_definitions;
@@ -316,10 +307,15 @@ impl Compiler {
                 let instructions = self.leave_scope()
                     .context("Leaving function scope.")?;
 
-                let compiled_fun = Object::CompiledFunction(instructions, num_locals, params.len());
+                for s in &free_symbols {
+                    self.load_symbol(s)
+                        .context("Emitting load instruction for free symbol")?;
+                }
+
+                let compiled_fun = Object::Closure(instructions, num_locals, params.len(), vec![]);
                 let const_idx = self.add_constant(compiled_fun) as u16;
-                self.emit(Opcode::OpConstant, vec![const_idx])
-                    .context("Emitting compiled function constant.")?;
+                self.emit(Opcode::OpClosure, vec![const_idx, free_symbols.len() as u16])
+                    .context("Emitting closure constant.")?;
             }
             Expression::CALL(_, func, args) => {
                 self.compile_expression(func)
@@ -470,6 +466,28 @@ impl Compiler {
         self.symbol_table = table;
 
         Ok(instructions)
+    }
+
+    fn load_symbol(&mut self, symbol: &Symbol) -> Result<()> {
+        match symbol.scope {
+            Scope::GlobalScope => {
+                self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
+                    .context("Emitting OpGetGlobal to load identifier.")?;
+            }
+            Scope::BuiltinScope => {
+                self.emit(Opcode::OpGetBuiltin, vec![symbol.index as u16])
+                    .context("Emitting OpGetBuiltin to load identifier.")?;
+            }
+            Scope::LocalScope => {
+                self.emit(Opcode::OpGetLocal, vec![symbol.index as u16])
+                    .context("Emitting OpGetLocal to load identifier.")?;
+            }
+            Scope::FreeScope => {
+                self.emit(Opcode::OpGetFree, vec![symbol.index as u16])
+                    .context("Emitting OpGetFree to load identifier.")?;
+            }
+        }
+        Ok(())
     }
 }
 

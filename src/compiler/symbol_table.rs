@@ -7,6 +7,7 @@ pub(crate) enum Scope {
     GlobalScope,
     LocalScope,
     BuiltinScope,
+    FreeScope,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -31,6 +32,7 @@ pub(crate) struct SymbolTable {
     store: HashMap<String, Symbol>,
     pub(crate) num_definitions: usize,
     pub(crate) outer: Option<Rc<Mutex<SymbolTable>>>,
+    pub(crate) free_symbols: Vec<Symbol>,
 }
 
 impl SymbolTable {
@@ -39,6 +41,7 @@ impl SymbolTable {
             store: HashMap::new(),
             num_definitions: 0,
             outer: None,
+            free_symbols: vec![],
         }
     }
 
@@ -47,6 +50,7 @@ impl SymbolTable {
             store: HashMap::new(),
             num_definitions: 0,
             outer: Some(outer),
+            free_symbols: vec![],
         }
     }
 
@@ -59,6 +63,14 @@ impl SymbolTable {
         symbol
     }
 
+    pub fn define_free(&mut self, original: &Symbol) -> Symbol {
+        self.free_symbols.push(original.clone());
+        let symbol = Symbol::new(&original.name, Scope::FreeScope, self.free_symbols.len() - 1);
+
+        self.store.insert(original.name.clone(), symbol.clone());
+        symbol
+    }
+
     pub(crate) fn define_builtin(&mut self, index: usize, name: &str) -> Symbol {
         let sym = Symbol::new(name, Scope::BuiltinScope, index);
 
@@ -67,11 +79,20 @@ impl SymbolTable {
         sym
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Symbol> {
+    pub fn resolve(&mut self, name: &str) -> Option<Symbol> {
         if let Some(s) = self.store.get(name) {
             Some(s.clone())
         } else if let Some(o) = &self.outer {
-            o.lock().unwrap().resolve(name)
+            let res = o.lock().unwrap().resolve(name);
+            if let Some(sym) = res {
+                match sym.scope {
+                    Scope::GlobalScope | Scope::BuiltinScope => Some(sym),
+                    _ => {
+                        let free = self.define_free(&sym);
+                        Some(free)
+                    }
+                }
+            } else { None }
         } else {
             None
         }
