@@ -55,9 +55,16 @@ fn test_hash_object(expected: &HashMap<HashKey, Object>, actual: &Object, test_n
 }
 
 #[derive(Debug)]
+enum ExpectError {
+    None,
+    Error(String),
+}
+
+#[derive(Debug)]
 struct VMTestCase {
     input: String,
     expected: Object,
+    expected_error: ExpectError,
 }
 
 impl VMTestCase {
@@ -65,12 +72,14 @@ impl VMTestCase {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Integer(expected_int),
+            expected_error: ExpectError::None,
         }
     }
     pub(crate) fn new_bool_result_case(input: &str, expected_bool: bool) -> Self {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Boolean(expected_bool),
+            expected_error: ExpectError::None,
         }
     }
 
@@ -78,6 +87,7 @@ impl VMTestCase {
         VMTestCase {
             input: input.to_string(),
             expected: Object::String(expected_string.to_string()),
+            expected_error: ExpectError::None,
         }
     }
 
@@ -85,12 +95,22 @@ impl VMTestCase {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Array(expected_array),
+            expected_error: ExpectError::None,
         }
     }
     pub(crate) fn new_null_result_case(input: &str) -> Self {
         VMTestCase {
             input: input.to_string(),
             expected: Object::Null,
+            expected_error: ExpectError::None,
+        }
+    }
+
+    pub(crate) fn new_expected_error(input: &str, err_msg: &str) -> Self {
+        VMTestCase {
+            input: input.to_string(),
+            expected: Object::Null,
+            expected_error: ExpectError::Error(err_msg.to_string()),
         }
     }
 }
@@ -108,10 +128,15 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
         // println!("{:?}", &vm);
         let run_err = vm.run();
         if let Err(e) = run_err {
-            for (i, cause) in e.chain().enumerate() {
-                eprintln!("\t{i}: {cause}");
+            if let ExpectError::Error(msg) = &test.expected_error {
+                assert_eq!(*msg, e.root_cause().to_string(), "Unexpected error message!\nwant={},\n got={}", msg, e.root_cause().to_string());
+                continue;
+            } else {
+                for (i, cause) in e.chain().enumerate() {
+                    eprintln!("\t{i}: {cause}");
+                }
+                assert!(false, "Running bytecode failed!\n{:?}", e);
             }
-            assert!(false, "Running bytecode failed!\n{:?}", e);
         }
         let stack_elem = vm.last_popped_stack_elem();
         if stack_elem.is_err() {
@@ -203,42 +228,52 @@ fn test_conditionals() {
         VMTestCase {
             input: "if (true) { 10 }".to_string(),
             expected: Object::Integer(10),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (true) { 10 } else { 20 }".to_string(),
             expected: Object::Integer(10),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (false) { 10 } else { 20 }".to_string(),
             expected: Object::Integer(20),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (1) { 10 }".to_string(),
             expected: Object::Integer(10),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (1 < 2) { 10 }".to_string(),
             expected: Object::Integer(10),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (1 < 2) { 10 } else { 20 }".to_string(),
             expected: Object::Integer(10),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (1 > 2) { 10 } else { 20 }".to_string(),
             expected: Object::Integer(20),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (1 > 2) { 10 }".to_string(),
             expected: Object::Null,
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (false) { 10 }".to_string(),
             expected: Object::Null,
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "if (( if (false) { 10 })) { 10 } else { 20 }".to_string(),
             expected: Object::Integer(20),
+            expected_error: ExpectError::None,
         },
     ];
 
@@ -287,6 +322,7 @@ fn test_hash_literals() {
         VMTestCase {
             input: "{}".to_string(),
             expected: Object::Hash(HashMap::new()),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "{1: 2, 2: 3}".to_string(),
@@ -294,6 +330,7 @@ fn test_hash_literals() {
                 (HashKey::from_object(&Object::Integer(1)).unwrap(), Object::Integer(2)),
                 (HashKey::from_object(&Object::Integer(2)).unwrap(), Object::Integer(3)),
             ])),
+            expected_error: ExpectError::None,
         },
         VMTestCase {
             input: "{1 + 1: 2 * 2, 3 + 3: 4 * 4}".to_string(),
@@ -301,6 +338,7 @@ fn test_hash_literals() {
                 (HashKey::from_object(&Object::Integer(2)).unwrap(), Object::Integer(4)),
                 (HashKey::from_object(&Object::Integer(6)).unwrap(), Object::Integer(16)),
             ])),
+            expected_error: ExpectError::None,
         },
     ];
 
@@ -470,4 +508,31 @@ fn test_calling_functions_with_wrong_arguments() {
             }
         }
     }
+}
+
+#[test]
+fn test_builtin_functions() {
+    let tests = vec![
+        VMTestCase::new_int_result_case("len(\"\")", 0),
+        VMTestCase::new_int_result_case("len(\"four\")", 4),
+        VMTestCase::new_int_result_case("len(\"hello world\")", 11),
+        VMTestCase::new_expected_error("len(1)", "argument to `len` not supported, got INTEGER"),
+        VMTestCase::new_expected_error("len(\"one\", \"two\")", "wrong number of arguments. got=2, want=1"),
+        VMTestCase::new_int_result_case("len([1,2,3])", 3),
+        VMTestCase::new_int_result_case("len([])", 0),
+        VMTestCase::new_null_result_case("puts(\"hello\", \"world\")"),
+        VMTestCase::new_int_result_case("first([1,2,3])", 1),
+        VMTestCase::new_null_result_case("first([])"),
+        VMTestCase::new_expected_error("first(1)", "argument to `first` must be ARRAY, got INTEGER"),
+        VMTestCase::new_int_result_case("last([1,2,3])", 3),
+        VMTestCase::new_null_result_case("last([])"),
+        VMTestCase::new_expected_error("last(1)", "argument to `last` must be ARRAY, got INTEGER"),
+        VMTestCase::new_array_result_case("rest([1,2,3])", vec![Object::Integer(2), Object::Integer(3)]),
+        VMTestCase::new_null_result_case("rest([])"),
+        VMTestCase::new_expected_error("rest(1)", "argument to `rest` must be ARRAY, got INTEGER"),
+        VMTestCase::new_array_result_case("push([], 1)", vec![Object::Integer(1)]),
+        VMTestCase::new_expected_error("push(1, 1)", "argument to `push` must be ARRAY, got INTEGER"),
+    ];
+
+    run_vm_tests(tests)
 }

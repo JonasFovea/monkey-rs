@@ -6,7 +6,8 @@ use anyhow::{bail, Context, Result};
 
 use crate::code::{read_uint16, read_uint8, Instructions, Opcode};
 use crate::compiler::Bytecode;
-use crate::object::{HashKey, Object};
+use crate::object;
+use crate::object::{get_builtin_function, HashKey, Object};
 use crate::vm::frame::Frame;
 
 mod test;
@@ -230,6 +231,14 @@ impl VM {
 
                     self.push(self.stack[bp + local_index].clone())
                         .context("Pushing local variable onto the stack.")?;
+                }
+                Opcode::OpGetBuiltin => {
+                    let builtin_index = read_uint8(&self.current_func().0[ip + 1..]) as usize;
+                    self.current_frame().ip += 1;
+
+                    let definition = object::BUILTINS[builtin_index];
+                    self.push(Object::Builtin(definition.to_string()))
+                        .context("Pushing builtin function.")?;
                 }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
@@ -483,6 +492,19 @@ impl VM {
                     .context("Pushing new stack frame.")?;
 
                 self.sp = new_sp;
+            }
+            Object::Builtin(func_name) => {
+                let mut args = Vec::with_capacity(num_args);
+                self.stack[self.sp - num_args..self.sp].clone_into(&mut args);
+
+                let builtin_func = get_builtin_function(func_name)
+                    .context("Loading builtin function.")?;
+                let result = builtin_func(args)
+                    .context("Calling builtin function.")?;
+                self.sp -= num_args + 1;
+
+                self.push(result)
+                    .context("Pushing builtin call result.")?;
             }
             _ => bail!("Calling non-function.")
         }

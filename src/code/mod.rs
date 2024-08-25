@@ -101,6 +101,7 @@ pub enum Opcode {
     OpReturn,
     OpGetLocal,
     OpSetLocal,
+    OpGetBuiltin,
 }
 
 impl Into<u8> for Opcode {
@@ -133,6 +134,7 @@ impl Into<u8> for Opcode {
             Opcode::OpReturn => 24,
             Opcode::OpGetLocal => 25,
             Opcode::OpSetLocal => 26,
+            Opcode::OpGetBuiltin => 27,
         }
     }
 }
@@ -248,6 +250,10 @@ impl Into<Definition> for Opcode {
                 name: "OpSetLocal".to_string(),
                 operand_widths: vec![1],
             },
+            Opcode::OpGetBuiltin => Definition {
+                name: "OpGetBuiltin".to_string(),
+                operand_widths: vec![1],
+            }
         }
     }
 }
@@ -284,6 +290,7 @@ impl TryFrom<u8> for Opcode {
             24 => Ok(Opcode::OpReturn),
             25 => Ok(Opcode::OpGetLocal),
             26 => Ok(Opcode::OpSetLocal),
+            27 => Ok(Opcode::OpGetBuiltin),
             _ => bail!("opcode {} undefined", value),
         }
     }

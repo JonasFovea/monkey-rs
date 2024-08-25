@@ -1,9 +1,11 @@
 use crate::ast::{Parser, Program};
 use crate::code::{lookup, make, read_operands, Instructions, Opcode};
+use crate::compiler::symbol_table::{Scope, Symbol, SymbolTable};
 use crate::compiler::Compiler;
 use crate::lexer::Lexer;
 use crate::object::Object;
 use std::rc::Rc;
+use std::sync::Mutex;
 
 struct CompilerTestCase {
     input: String,
@@ -759,6 +761,72 @@ fn test_let_statement_scopes() {
     ];
 
     run_compiler_tests(tests);
+}
+
+#[test]
+fn test_builtins() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "len([]); push([],1);".to_string(),
+            expected_constants: vec![Object::Integer(1)],
+            expected_instructions: vec![
+                make(Opcode::OpGetBuiltin, vec![0]).unwrap(),
+                make(Opcode::OpArray, vec![0]).unwrap(),
+                make(Opcode::OpCall, vec![1]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+                make(Opcode::OpGetBuiltin, vec![4]).unwrap(),
+                make(Opcode::OpArray, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpCall, vec![2]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap(),
+            ]
+        },
+        CompilerTestCase {
+            input: "fn() { len([]) }".to_string(),
+            expected_constants: vec![
+                Object::CompiledFunction(Instructions::join(vec![
+                    make(Opcode::OpGetBuiltin, vec![0]).unwrap(),
+                    make(Opcode::OpArray, vec![0]).unwrap(),
+                    make(Opcode::OpCall, vec![1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 0, 0)
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpConstant, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        }
+    ];
+
+    run_compiler_tests(tests)
+}
+
+#[test]
+fn test_resolve_builtins() {
+    let global = Rc::new(Mutex::new(SymbolTable::new()));
+    let first_local = Rc::new(Mutex::new(SymbolTable::new_enclosed(global.clone())));
+    let second_local = Rc::new(Mutex::new(SymbolTable::new_enclosed(first_local.clone())));
+
+    let expected = vec![
+        Symbol { name: "a".to_string(), scope: Scope::BuiltinScope, index: 0 },
+        Symbol { name: "c".to_string(), scope: Scope::BuiltinScope, index: 1 },
+        Symbol { name: "e".to_string(), scope: Scope::BuiltinScope, index: 2 },
+        Symbol { name: "f".to_string(), scope: Scope::BuiltinScope, index: 3 },
+    ];
+
+    for (i, sym) in (expected.clone()).iter().enumerate() {
+        global.lock().unwrap().define_builtin(i, &sym.name);
+    }
+
+    for table in [global, first_local, second_local] {
+        for exp in &expected {
+            if let Some(sym) = table.lock().unwrap().resolve(&exp.name) {
+                assert_eq!(*exp, sym, "expected {:?} to resolve to {:?}, got={:?}", exp.name, *exp, sym)
+            } else {
+                assert!(false, "name {:?} is not resolvable!", exp.name);
+            }
+        }
+    }
 }
 
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {

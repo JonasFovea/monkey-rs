@@ -6,6 +6,7 @@ use std::sync::Mutex;
 pub(crate) enum Scope {
     GlobalScope,
     LocalScope,
+    BuiltinScope,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -56,6 +57,14 @@ impl SymbolTable {
         self.store.insert(name.to_string(), symbol.clone());
         self.num_definitions += 1;
         symbol
+    }
+
+    pub(crate) fn define_builtin(&mut self, index: usize, name: &str) -> Symbol {
+        let sym = Symbol::new(name, Scope::BuiltinScope, index);
+
+        self.store.insert(name.to_string(), sym.clone());
+
+        sym
     }
 
     pub fn resolve(&self, name: &str) -> Option<Symbol> {

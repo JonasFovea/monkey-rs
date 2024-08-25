@@ -11,7 +11,7 @@ use crate::compiler::symbol_table::SymbolTable;
 use crate::compiler::Compiler;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
-use crate::object::{Environment, Object};
+use crate::object::{Environment, Object, BUILTINS};
 use crate::vm::{GLOBALS_SIZE, VM};
 
 pub fn start_interpreted_repl() {
@@ -59,6 +59,10 @@ pub fn start_interpreted_repl() {
 
 pub fn start_compiled_repl() {
     let symbol_table = Rc::new(Mutex::new(SymbolTable::new()));
+    for (index, builtin_name) in BUILTINS.iter().enumerate() {
+        symbol_table.lock().unwrap().define_builtin(index, builtin_name);
+    }
+
     let constants = Rc::new(Mutex::new(Vec::new()));
     const NULL: Object = Object::Null;
     let globals = Rc::new(Mutex::new(vec![NULL; GLOBALS_SIZE].into_boxed_slice()));

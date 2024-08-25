@@ -276,8 +276,8 @@ fn test_builtin_functions() {
     }
 
     let failing_tests = vec![
-        ("len(1)", "Invalid argument of type: Integer"),
-        ("len(\"one\", \"two\")", "Invalid number of arguments! Expected: 1, Got: 2"),
+        ("len(1)", "argument to `len` not supported, got INTEGER"),
+        ("len(\"one\", \"two\")", "wrong number of arguments. got=2, want=1"),
     ];
 
     for (input, expected) in failing_tests {

@@ -4,10 +4,9 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use anyhow::{bail, Context, Result};
-
 use crate::ast::{BlockStatement, Identifier};
 use crate::code::Instructions;
+use anyhow::{bail, Context, Result};
 
 #[derive(Clone)]
 pub enum Object {
@@ -245,6 +244,8 @@ impl fmt::Display for Environment {
 }
 
 
+pub(crate) static BUILTINS: [&'static str; 6] = ["len", "first", "last", "rest", "push", "puts"];
+
 pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -> Result<Object>>> {
     match func_name {
         "len" => Ok(Box::new(len)),
@@ -259,18 +260,18 @@ pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -
 
 fn len(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::String(s) => Ok(Object::Integer(s.len() as i64)),
         Object::Array(a) => Ok(Object::Integer(a.len() as i64)),
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `len` not supported, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn first(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
@@ -279,13 +280,13 @@ fn first(args: Vec<Object>) -> Result<Object> {
             }
             Ok(a[0].clone())
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `first` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn last(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
@@ -294,13 +295,13 @@ fn last(args: Vec<Object>) -> Result<Object> {
             }
             Ok(a[a.len() - 1].clone())
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `last` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn rest(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
@@ -309,13 +310,13 @@ fn rest(args: Vec<Object>) -> Result<Object> {
             }
             Ok(Object::Array(a[1..].iter().map(|e| e.clone()).collect()))
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `rest` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn push(args: Vec<Object>) -> Result<Object> {
     if args.len() != 2 {
-        bail!("Invalid number of arguments! Expected: 2, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=2", args.len());
     }
     match (&args[0], &args[1]) {
         (Object::Array(a), b) => {
@@ -323,7 +324,7 @@ fn push(args: Vec<Object>) -> Result<Object> {
             new_arr.push(b.clone());
             Ok(Object::Array(new_arr))
         }
-        (a, b) => bail!("Invalid arguments of type: {}, {}", a.type_str(), b.type_str())
+        (a, _) => bail!("argument to `push` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 

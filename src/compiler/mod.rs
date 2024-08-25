@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use crate::ast::{Expression, ExpressionStatement, LetStatement, Program, ReturnStatement, Statement};
 use crate::code::{make, Instructions, Opcode};
 use crate::compiler::symbol_table::{Scope, SymbolTable};
-use crate::object::Object;
+use crate::object::{Object, BUILTINS};
 use crate::token::TokenType;
 
 mod test;
@@ -23,9 +23,14 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn new() -> Self {
+        let mut symbol_table = SymbolTable::new();
+        for (i, builtin) in BUILTINS.iter().enumerate() {
+            symbol_table.define_builtin(i, builtin);
+        }
+
         Compiler {
             constants: Rc::new(Mutex::new(Vec::new())),
-            symbol_table: Rc::new(Mutex::new(SymbolTable::new())),
+            symbol_table: Rc::new(Mutex::new(symbol_table)),
             scopes: vec![CompilationScope {
                 instructions: Instructions::new(),
                 last_instruction: None,
@@ -234,12 +239,19 @@ impl Compiler {
                     .resolve(&id.value)
                     .with_context(|| format!("Resolving identifier {:?} in symbol table.", &id.value))?;
 
-                if symbol.scope == Scope::GlobalScope {
-                    self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
-                        .context("Emitting OpGetGlobal to load identifier.")?;
-                } else {
-                    self.emit(Opcode::OpGetLocal, vec![symbol.index as u16])
-                        .context("Emitting OpGetLocal to load identifier.")?;
+                match symbol.scope {
+                    Scope::GlobalScope => {
+                        self.emit(Opcode::OpGetGlobal, vec![symbol.index as u16])
+                            .context("Emitting OpGetGlobal to load identifier.")?;
+                    }
+                    Scope::BuiltinScope => {
+                        self.emit(Opcode::OpGetBuiltin, vec![symbol.index as u16])
+                            .context("Emitting OpGetBuiltin to load identifier.")?;
+                    }
+                    Scope::LocalScope => {
+                        self.emit(Opcode::OpGetLocal, vec![symbol.index as u16])
+                            .context("Emitting OpGetLocal to load identifier.")?;
+                    }
                 }
             }
             Expression::STRING_LITERAL(_, s) => {
