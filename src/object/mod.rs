@@ -4,10 +4,11 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 use std::sync::Mutex;
 
+use crate::ast::{BlockStatement, Identifier};
+use crate::code::Instructions;
 use anyhow::{bail, Context, Result};
 
-use crate::ast::{BlockStatement, Identifier};
-
+#[allow(dead_code)]
 #[derive(Clone)]
 pub enum Object {
     Integer(i64),
@@ -19,6 +20,8 @@ pub enum Object {
     Builtin(String),
     Array(Vec<Object>),
     Hash(HashMap<HashKey, Object>),
+    CompiledFunction(Instructions, usize, usize), // instructions, num_locals, num_params
+    Closure(Instructions, usize, usize, Vec<Object>), // instructions, num_locals, num_params, frees
 }
 
 impl Object {
@@ -33,7 +36,17 @@ impl Object {
             Object::Return(_) => "Return",
             Object::Array(_) => "Array",
             Object::Hash(_) => "Hash",
+            Object::CompiledFunction(..) => "CompiledFunction",
+            Object::Closure(..) => "Closure"
         }.to_string()
+    }
+
+    pub(crate) fn is_truthy(&self) -> bool {
+        match self {
+            Object::Boolean(b) => *b,
+            Object::Null => false,
+            _ => true
+        }
     }
 }
 
@@ -69,12 +82,20 @@ impl PartialEq for Object {
                 if let Object::Array(b) = other {
                     a == b
                 } else { false }
-            },
+            }
             Object::Hash(a) => {
                 if let Object::Hash(b) = other {
                     a == b
-                }else { false }
+                } else { false }
             }
+            Object::CompiledFunction(a, nla, npa) => {
+                if let Object::CompiledFunction(b, nlb, npb) = other {
+                    a == b && nla == nlb && npa == npb
+                } else { false }
+            }
+            Object::Closure(insa, nla, npa, fra) => if let Object::Closure(insb, nlb, npb, frb) = other {
+                insa == insb && nla == nlb && npa == npb && fra == frb
+            } else { false }
         }
     }
 
@@ -100,14 +121,16 @@ impl fmt::Display for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
-            },
+            }
             Object::Hash(map) => {
                 format!("{{{}}}", map
                     .iter()
-                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .map(|(k, v)| format!("{}: {}", k, v))
                     .collect::<Vec<String>>()
                     .join(", "))
             }
+            Object::CompiledFunction(..) => format!("CompiledFunction[{:p}]", &self),
+            Object::Closure(..) => format!("Closure[{:p}]", &self),
         };
         write!(f, "{}", formatted)
     }
@@ -132,14 +155,16 @@ impl fmt::Debug for Object {
                             .collect::<Vec<String>>()
                             .join(", ")
                 )
-            },
+            }
             Object::Hash(map) => {
                 format!("Hash {{ Elements: {{{:?}}}}}", map
                     .iter()
-                    .map(|(k,v)| format!("{}: {}", k,v))
+                    .map(|(k, v)| format!("{}: {}", k, v))
                     .collect::<Vec<String>>()
                     .join(", "))
             }
+            Object::CompiledFunction(ins, locals, params) => format!("CompiledFunction {{instructions: {:?}, num_locals: {}, num_params: {}}}", ins, locals, params),
+            Object::Closure(ins, locals, params, frees) => format!("Closure {{ instructions: {:?}, num_locals: {}, num_params: {}, free variables: {:?}}}", ins, locals, params, frees),
         };
         write!(f, "{}", formatted)
     }
@@ -198,7 +223,7 @@ impl Environment {
     }
 }
 
-impl std::cmp::PartialEq for Environment {
+impl PartialEq for Environment {
     fn eq(&self, other: &Self) -> bool {
         self.store == other.store && if let (Some(a), Some(b)) = (&self.outer, &other.outer) {
             Rc::ptr_eq(a, b)
@@ -227,6 +252,8 @@ impl fmt::Display for Environment {
 }
 
 
+pub(crate) static BUILTINS: [&'static str; 6] = ["len", "first", "last", "rest", "push", "puts"];
+
 pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -> Result<Object>>> {
     match func_name {
         "len" => Ok(Box::new(len)),
@@ -241,18 +268,18 @@ pub fn get_builtin_function(func_name: &str) -> Result<Box<dyn Fn(Vec<Object>) -
 
 fn len(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::String(s) => Ok(Object::Integer(s.len() as i64)),
         Object::Array(a) => Ok(Object::Integer(a.len() as i64)),
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `len` not supported, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn first(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
@@ -261,28 +288,28 @@ fn first(args: Vec<Object>) -> Result<Object> {
             }
             Ok(a[0].clone())
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `first` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
-fn last(args: Vec<Object>) -> Result<Object>{
+fn last(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
             if a.len() < 1 {
                 return Ok(Object::Null);
             }
-            Ok(a[a.len()-1].clone())
+            Ok(a[a.len() - 1].clone())
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `last` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn rest(args: Vec<Object>) -> Result<Object> {
     if args.len() != 1 {
-        bail!("Invalid number of arguments! Expected: 1, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=1", args.len());
     }
     match &args[0] {
         Object::Array(a) => {
@@ -291,13 +318,13 @@ fn rest(args: Vec<Object>) -> Result<Object> {
             }
             Ok(Object::Array(a[1..].iter().map(|e| e.clone()).collect()))
         }
-        a => bail!("Invalid argument of type: {}", a.type_str())
+        a => bail!("argument to `rest` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
 fn push(args: Vec<Object>) -> Result<Object> {
     if args.len() != 2 {
-        bail!("Invalid number of arguments! Expected: 2, Got: {}", args.len());
+        bail!("wrong number of arguments. got={}, want=2", args.len());
     }
     match (&args[0], &args[1]) {
         (Object::Array(a), b) => {
@@ -305,12 +332,12 @@ fn push(args: Vec<Object>) -> Result<Object> {
             new_arr.push(b.clone());
             Ok(Object::Array(new_arr))
         }
-        (a, b) => bail!("Invalid arguments of type: {}, {}", a.type_str(), b.type_str())
+        (a, _) => bail!("argument to `push` must be ARRAY, got {}", a.type_str().to_uppercase())
     }
 }
 
-fn puts(args: Vec<Object>) -> Result<Object>{
-    for arg in args{
+fn puts(args: Vec<Object>) -> Result<Object> {
+    for arg in args {
         println!("{arg}");
     }
     Ok(Object::Null)
@@ -329,8 +356,8 @@ impl HashKey {
             Object::String(s) => Ok(HashKey::STRING(s.clone())),
             Object::Integer(i) => Ok(HashKey::INT(*i)),
             Object::Boolean(b) => Ok(HashKey::BOOL(*b)),
-            o => { 
-                bail!("Object of type {} is not hashable! Supported types: Integer, String, Boolean.", o.type_str()); 
+            o => {
+                bail!("Object of type {} is not hashable! Supported types: Integer, String, Boolean.", o.type_str());
             }
         }
     }
@@ -338,7 +365,7 @@ impl HashKey {
 
 impl fmt::Display for HashKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self { 
+        write!(f, "{}", match self {
             HashKey::STRING(s) => format!("{}", s),
             HashKey::INT(i) => format!("{}", i),
             HashKey::BOOL(b) => format!("{}", b)

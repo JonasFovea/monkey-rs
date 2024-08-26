@@ -29,11 +29,11 @@ impl fmt::Display for Expression {
                 }
                 write!(f, "{}", s)
             }
-            Expression::FUNCTION(_, parameters, body) => {
+            Expression::FUNCTION(_, parameters, body, name) => {
                 let param_strings: Vec<String> = parameters.iter().map(|ident| format!("{}", ident)).collect();
                 let param_string = param_strings.join(", ");
 
-                write!(f, "fn ({}) {}", param_string, body)
+                write!(f, "fn {name} params : ({}) body: {{ {} }}", param_string, body)
             }
             Expression::CALL(_, function, arguments) => {
                 let argument_strings: Vec<String> = arguments.iter().map(|a| format!("{}", a)).collect();
