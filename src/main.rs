@@ -3,9 +3,10 @@ use std::rc::Rc;
 use std::sync::Mutex;
 
 use argparse;
-use argparse::{ArgumentParser, Store, StoreFalse};
+use argparse::{ArgumentParser, Store, StoreFalse, StoreTrue};
 
 use crate::ast::Parser;
+use crate::benchmark::fib_benchmark;
 use crate::evaluator::eval_program;
 use crate::lexer::Lexer;
 use crate::object::Environment;
@@ -13,22 +14,25 @@ use crate::object::Environment;
 mod token;
 mod lexer;
 mod repl;
-mod ast;
+pub(crate) mod ast;
 mod object;
 mod evaluator;
 mod code;
 mod compiler;
 mod vm;
+mod benchmark;
 
 struct Options {
     filename: String,
     use_interpreter: bool,
+    benchmark: bool,
 }
 
 fn main() {
     let mut opts = Options {
         filename: String::new(),
         use_interpreter: true,
+        benchmark: false,
     };
 
     let mut ap = ArgumentParser::new();
@@ -45,22 +49,33 @@ fn main() {
             StoreFalse,
             "Flag for usage of the Monkey-rs compiler.",
         );
+    ap.refer(&mut opts.benchmark)
+        .add_option(
+            &["-b", "--benchmark"],
+            StoreTrue,
+            "Flag to run benchmark. All other input is ignored.",
+        );
 
     ap.parse_args_or_exit();
     drop(ap);
+
+    if opts.benchmark {
+        fib_benchmark();
+        return;
+    }
 
     if opts.filename.len() > 0 {
         interpret_file(&opts.filename);
     } else {
         if opts.use_interpreter {
             repl::start_interpreted_repl();
-        }else { 
+        } else {
             repl::start_compiled_repl();
         }
     }
 }
 
-fn interpret_file(filename: &str){
+fn interpret_file(filename: &str) {
     let file_content = match std::fs::read_to_string(filename) {
         Ok(content) => content,
         Err(e) => {

@@ -626,3 +626,23 @@ fn test_recursive_closures() {
 
     run_vm_tests(tests);
 }
+
+#[test]
+fn test_recursive_fibonacci() {
+    let input = "let fibonacci = fn (x) {\
+        if (x == 0){\
+            return 0;\
+        } else {\
+            if (x == 1) {
+                return 1;
+            } else {
+                return fibonacci(x - 1) + fibonacci(x - 2);\
+            }
+        }
+    };
+    fibonacci(15);";
+    let tests = vec![
+        VMTestCase::new_int_result_case(input, 610),
+    ];
+    run_vm_tests(tests);
+}
