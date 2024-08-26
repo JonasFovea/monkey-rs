@@ -1,4 +1,3 @@
-
 use std::fmt;
 use std::fmt::Formatter;
 use std::str::FromStr;
@@ -58,7 +57,7 @@ pub enum Expression {
     PREFIX(Token, Box<Expression>),
     INFIX(Box<Expression>, Token, Box<Expression>),
     IF_EXPRESSION(Token, Box<Expression>, BlockStatement, Option<BlockStatement>),
-    FUNCTION(Token, Vec<Identifier>, BlockStatement),
+    FUNCTION(Token, Vec<Identifier>, BlockStatement, String),
     CALL(Token, Box<Expression>, Vec<Expression>),
     None,
 }
@@ -122,14 +121,14 @@ impl Parser {
     fn parse_statement(&mut self) -> Result<Statement> {
         let tok = self.current_token.clone()
             .with_context(|| format!("Current token not found: {:?}", &self.current_token))?;
-        return match tok.token_type {
+        match tok.token_type {
             TokenType::LET => { self.parse_let_statement() }
             TokenType::RETURN => { self.parse_return_statement() }
             _ => {
                 self.parse_expression_statement()
                     .context("Parsing expression statement.")
             }
-        };
+        }
     }
     fn parse_let_statement(&mut self) -> Result<Statement> {
         let let_token = self.current_token.clone().unwrap();
@@ -145,6 +144,10 @@ impl Parser {
         self.next_token();
 
         let right_expr = self.parse_expression(&Precedence::LOWEST)?;
+
+        let right_expr = if let Expression::FUNCTION(tok, param, body, _) = right_expr {
+            Expression::FUNCTION(tok, param, body, ident_token.literal.clone())
+        } else { right_expr };
 
         if self.peek_token_is(TokenType::SEMICOLON) {
             self.next_token();
@@ -233,8 +236,8 @@ impl Parser {
             TokenType::IF => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_if_expression))) }
             TokenType::FUNCTION => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_function_literal))) }
             TokenType::STRING => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_string_literal))) }
-            TokenType::LBRACKET => {Some(ParseFunction::PREFIX(Box::new(Parser::parse_array_literal)))}
-            TokenType::LBRACE => {Some(ParseFunction::PREFIX(Box::new(Parser::parse_hash_literal)))}
+            TokenType::LBRACKET => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_array_literal))) }
+            TokenType::LBRACE => { Some(ParseFunction::PREFIX(Box::new(Parser::parse_hash_literal))) }
             _ => None
         }
     }
@@ -258,19 +261,19 @@ impl Parser {
     fn parse_array_literal(&mut self) -> Result<Expression> {
         let expressions = self.parse_expression_list(TokenType::RBRACKET)
             .context("Parsing array literal expression list.")?;
-        
+
         Ok(Expression::ARRAY_LITERAL(Token::new(TokenType::LBRACKET, "["), expressions))
     }
     fn parse_hash_literal(&mut self) -> Result<Expression> {
         let tok = self.current_token.clone()
             .context("Current token missing.")?;
-        
+
         let mut keys = Vec::new();
         let mut vals = Vec::new();
 
         while !self.peek_token_is(TokenType::RBRACE) {
             self.next_token();
-            
+
             let key = self.parse_expression(&Precedence::LOWEST)
                 .context("Parsing key expression of hash literal.")?;
             self.expect_peek(TokenType::COLON)
@@ -278,20 +281,20 @@ impl Parser {
             self.next_token();
             let val = self.parse_expression(&Precedence::LOWEST)
                 .context("Parsing value expression of hash literal.")?;
-            
+
             keys.push(key);
             vals.push(val);
-            
-            if !self.peek_token_is(TokenType::RBRACE) && 
+
+            if !self.peek_token_is(TokenType::RBRACE) &&
                 !self.expect_peek(TokenType::COMMA)
-                .context("Peeking for comma in hash literal.")?{
+                    .context("Peeking for comma in hash literal.")? {
                 bail!("Expected comma for next value or closing brace of hash literal.");
             }
         }
-        
+
         self.expect_peek(TokenType::RBRACE)
             .context("Peeking closing brace of hash literal.")?;
-        
+
         Ok(HASH_LITERAL(tok, keys, vals))
     }
     fn parse_boolean(&mut self) -> Result<Expression> {
@@ -426,7 +429,7 @@ impl Parser {
         let body = self.parse_block_statement()
             .context("Parsing block statement of function.")?;
 
-        Ok(Expression::FUNCTION(tok, parameters, body))
+        Ok(Expression::FUNCTION(tok, parameters, body, "".to_string()))
     }
     fn parse_function_parameters(&mut self) -> Result<Vec<Identifier>> {
         let mut identifiers = Vec::new();
@@ -466,14 +469,14 @@ impl Parser {
         self.parse_expression_list(TokenType::RPAREN)
             .context("Parsing list of function call arguments.")
     }
-    fn parse_expression_list(&mut self, end: TokenType) -> Result<Vec<Expression>>{
+    fn parse_expression_list(&mut self, end: TokenType) -> Result<Vec<Expression>> {
         let mut list = Vec::new();
-        
-        if self.peek_token_is(end.clone()){
+
+        if self.peek_token_is(end.clone()) {
             self.next_token();
             return Ok(list);
         }
-        
+
         self.next_token();
         list.push(self.parse_expression(&Precedence::LOWEST).context("Parsing first expression in list.")?);
 
@@ -490,18 +493,18 @@ impl Parser {
 
         Ok(list)
     }
-    fn parse_index_expression(&mut self, left: &Expression) -> Result<Expression>{
+    fn parse_index_expression(&mut self, left: &Expression) -> Result<Expression> {
         let tok = self.current_token.clone().context("Missing current token.")?;
-        
+
         self.next_token();
-        
+
         let idx = self.parse_expression(&Precedence::LOWEST)
             .context("Parsing index value of index expression.")?;
-        
+
         self.expect_peek(TokenType::RBRACKET).context("Peeking end delimiter right bracket.")?;
-        
-        Ok(Expression::INDEX_EXPRESSION(tok,Box::new(left.clone()), Box::new(idx)))
-    } 
+
+        Ok(Expression::INDEX_EXPRESSION(tok, Box::new(left.clone()), Box::new(idx)))
+    }
 }
 
 #[derive(PartialOrd, PartialEq)]

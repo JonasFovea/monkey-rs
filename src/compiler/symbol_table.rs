@@ -8,6 +8,7 @@ pub(crate) enum Scope {
     LocalScope,
     BuiltinScope,
     FreeScope,
+    FunctionScope,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -77,6 +78,13 @@ impl SymbolTable {
         self.store.insert(name.to_string(), sym.clone());
 
         sym
+    }
+
+    pub(crate) fn define_function_name(&mut self, name: &str) -> Symbol {
+        let symbol = Symbol::new(name, Scope::FunctionScope, 0);
+        self.store.insert(name.to_string(), symbol.clone());
+
+        symbol
     }
 
     pub fn resolve(&mut self, name: &str) -> Option<Symbol> {

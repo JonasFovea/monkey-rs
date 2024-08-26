@@ -931,6 +931,66 @@ fn test_closures() {
     run_compiler_tests(tests);
 }
 
+#[test]
+fn test_recursive_functions() {
+    let tests = vec![
+        CompilerTestCase {
+            input: "let countDown = fn(x){ countDown(x -1);}; countDown(1);".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpCurrentClosure, vec![]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpConstant, vec![0]).unwrap(),
+                    make(Opcode::OpSub, vec![]).unwrap(),
+                    make(Opcode::OpCall, vec![1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 0, 1, vec![]),
+                Object::Integer(1)
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpClosure, vec![1, 0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpConstant, vec![2]).unwrap(),
+                make(Opcode::OpCall, vec![1]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        },
+        CompilerTestCase {
+            input: "let wrapper = fn(){ let countDown = fn(x){ countDown(x-1);}; countDown(1); }; wrapper();".to_string(),
+            expected_constants: vec![
+                Object::Integer(1),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpCurrentClosure, vec![]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpConstant, vec![0]).unwrap(),
+                    make(Opcode::OpSub, vec![]).unwrap(),
+                    make(Opcode::OpCall, vec![1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 0, 1, vec![]),
+                Object::Integer(1),
+                Object::Closure(Instructions::join(vec![
+                    make(Opcode::OpClosure, vec![1, 0]).unwrap(),
+                    make(Opcode::OpSetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpGetLocal, vec![0]).unwrap(),
+                    make(Opcode::OpConstant, vec![2]).unwrap(),
+                    make(Opcode::OpCall, vec![1]).unwrap(),
+                    make(Opcode::OpReturnValue, vec![]).unwrap()
+                ]), 1, 0, vec![]),
+            ],
+            expected_instructions: vec![
+                make(Opcode::OpClosure, vec![3, 0]).unwrap(),
+                make(Opcode::OpSetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpGetGlobal, vec![0]).unwrap(),
+                make(Opcode::OpCall, vec![0]).unwrap(),
+                make(Opcode::OpPop, vec![]).unwrap()
+            ]
+        }
+    ];
+    run_compiler_tests(tests);
+}
+
 fn run_compiler_tests(tests: Vec<CompilerTestCase>) {
     for (i, test) in tests.iter().enumerate() {
         let program = parse(&test.input);
@@ -986,7 +1046,7 @@ fn test_instructions(expected: Vec<Instructions>, actual: Instructions, test_cas
 }
 
 fn test_constants(expected: Vec<Object>, actual: Vec<Object>, test_case: usize) {
-    assert_eq!(expected.len(), actual.len());
+    assert_eq!(expected.len(), actual.len(), "Number of constants for test case {test_case} does not match, want={}, got={}", expected.len(), actual.len());
 
     for (e, a) in expected.iter().zip(actual) {
         match e {

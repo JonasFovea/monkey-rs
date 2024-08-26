@@ -273,6 +273,11 @@ impl VM {
                         bail!("Expected current frame to contain a Closure, got {:?} instead", current_closure)
                     }
                 }
+                Opcode::OpCurrentClosure => {
+                    let current_closure = *self.current_frame().func.clone();
+                    self.push(current_closure)
+                        .context("Pushing current closure object.")?
+                }
                 _ => bail!("Operation {:?} not yet implemented!", op)
             }
         }

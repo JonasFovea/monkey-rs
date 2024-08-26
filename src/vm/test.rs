@@ -124,7 +124,17 @@ fn run_vm_tests(tests: Vec<VMTestCase>) {
             assert!(false, "Compiling the program failed!\n{:?}", cmpl_err);
         }
 
-        let mut vm = VM::new(comp.bytecode().unwrap());
+        let bytecode = comp.bytecode().unwrap();
+
+        println!("\n======\nTestcase no. {tst_no}\n");
+        for (i, c) in bytecode.constants.iter().enumerate() {
+            println!("CONSTANT {i:2} {c:p} {}", c.type_str());
+            if let Object::Closure(ins, ..) = c {
+                println!("{}\n", ins.to_string().unwrap());
+            }
+        }
+
+        let mut vm = VM::new(bytecode);
         // println!("{:?}", &vm);
         let run_err = vm.run();
         if let Err(e) = run_err {
@@ -571,4 +581,48 @@ fn test_closures() {
     ];
 
     run_vm_tests(tests)
+}
+
+#[test]
+fn test_recursive_closures() {
+    let tests = vec![
+        VMTestCase::new_int_result_case(
+            "let countDown = fn(x){\
+            if(x == 0){\
+            return 0;\
+            } else{\
+            return countDown(x -1);\
+            }\
+            };\
+            countDown(1);",
+            0),
+        VMTestCase::new_int_result_case(
+            "let countDown = fn(x){\
+            if(x == 0){\
+            return 0;\
+            } else{\
+            return countDown(x -1);\
+            }\
+            };\
+            let wrapper = fn(){ \
+            countDown(1);\
+            };\
+            wrapper();",
+            0),
+        VMTestCase::new_int_result_case(
+            "let wrapper = fn(){ \
+                let countDown = fn(x){\
+                    if(x == 0){\
+                        return 0;\
+                    } else{\
+                        return countDown(x -1);\
+                    }\
+                };\
+                countDown(1);\
+            };\
+            wrapper();",
+            0),
+    ];
+
+    run_vm_tests(tests);
 }

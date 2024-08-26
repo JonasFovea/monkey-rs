@@ -125,7 +125,7 @@ pub fn eval_expression(exp: Expression, env: Rc<Mutex<Environment>>) -> Result<O
                 } else { bail!("Identifier not found: {}", &ident) }
             } else { Ok(value.unwrap().clone()) }
         }
-        Expression::FUNCTION(_, params, body) => {
+        Expression::FUNCTION(_, params, body, _) => {
             Ok(Object::Function(params, body, Rc::new(Mutex::new(Environment::new_enclosed(env.clone())))))
         }
         Expression::CALL(_, func, args) => {

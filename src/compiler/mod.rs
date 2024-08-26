@@ -75,12 +75,13 @@ impl Compiler {
                 self.emit(Opcode::OpPop, vec![])?;
             }
             Statement::LET(LetStatement { token: _, value: exp, identifier: id }) => {
-                self.compile_expression(exp)
-                    .context("Compiling value of let statement.")?;
-
                 let symbol = self.symbol_table.lock()
                     .expect("Failed to access symbol table")
                     .define(&id.value);
+
+                self.compile_expression(exp)
+                    .context("Compiling value of let statement.")?;
+
 
                 if symbol.scope == Scope::GlobalScope {
                     self.emit(Opcode::OpSetGlobal, vec![symbol.index as u16])
@@ -278,8 +279,14 @@ impl Compiler {
                 self.emit(Opcode::OpIndex, vec![])
                     .context("Emitting index operator.")?;
             }
-            Expression::FUNCTION(_, params, body) => {
+            Expression::FUNCTION(_, params, body, name) => {
                 self.enter_scope();
+
+                if name.len() > 0 {
+                    self.symbol_table
+                        .lock().expect("Could not access symbol table!")
+                        .define_function_name(&name);
+                }
 
                 for param in params {
                     self.symbol_table.lock().expect("Accessing symbol table.").define(&param.value);
@@ -485,6 +492,10 @@ impl Compiler {
             Scope::FreeScope => {
                 self.emit(Opcode::OpGetFree, vec![symbol.index as u16])
                     .context("Emitting OpGetFree to load identifier.")?;
+            }
+            Scope::FunctionScope => {
+                self.emit(Opcode::OpCurrentClosure, vec![])
+                    .context("Emitting OpCurrentClosure.")?;
             }
         }
         Ok(())

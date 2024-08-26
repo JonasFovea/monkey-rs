@@ -105,6 +105,7 @@ pub enum Opcode {
     OpGetBuiltin,
     OpClosure,
     OpGetFree,
+    OpCurrentClosure,
 }
 
 impl Into<u8> for Opcode {
@@ -140,6 +141,7 @@ impl Into<u8> for Opcode {
             Opcode::OpGetBuiltin => 27,
             Opcode::OpClosure => 28,
             Opcode::OpGetFree => 29,
+            Opcode::OpCurrentClosure => 30,
         }
     }
 }
@@ -267,6 +269,10 @@ impl Into<Definition> for Opcode {
                 name: "OpGetFree".to_string(),
                 operand_widths: vec![1],
             },
+            Opcode::OpCurrentClosure => Definition {
+                name: "OpCurrentClosure".to_string(),
+                operand_widths: vec![],
+            },
         }
     }
 }
@@ -306,6 +312,7 @@ impl TryFrom<u8> for Opcode {
             27 => Ok(Opcode::OpGetBuiltin),
             28 => Ok(Opcode::OpClosure),
             29 => Ok(Opcode::OpGetFree),
+            30 => Ok(Opcode::OpCurrentClosure),
             _ => bail!("opcode {} undefined", value),
         }
     }

@@ -223,3 +223,36 @@ fn test_unresolvable_free() {
         }
     }
 }
+
+#[test]
+fn test_define_and_resolve_function_name() {
+    let mut global = SymbolTable::new();
+    global.define_function_name("a");
+
+    let expected = Symbol {
+        name: "a".to_string(),
+        scope: Scope::FunctionScope,
+        index: 0,
+    };
+
+    if let Some(res) = global.resolve(&expected.name) {
+        assert_eq!(expected, res);
+    } else { assert!(false); }
+}
+
+#[test]
+fn test_shadowing_function_name() {
+    let mut global = SymbolTable::new();
+    global.define_function_name("a");
+    global.define("a");
+
+    let expected = Symbol {
+        name: "a".to_string(),
+        scope: Scope::GlobalScope,
+        index: 0,
+    };
+
+    if let Some(res) = global.resolve(&expected.name) {
+        assert_eq!(expected, res);
+    } else { assert!(false); }
+}

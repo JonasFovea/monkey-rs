@@ -309,7 +309,7 @@ fn test_function_literal_parsing() {
     assert_eq!(program.statements.len(), 1);
 
     if let Statement::EXPRESSION(expr_stmt) = &program.statements[0] {
-        if let Expression::FUNCTION(_, params, body) = &expr_stmt.expression {
+        if let Expression::FUNCTION(_, params, body, _) = &expr_stmt.expression {
             assert_eq!(params.len(), 2);
             assert_eq!(format!("{}", params[0]), "x");
             assert_eq!(format!("{}", params[1]), "y");
@@ -337,7 +337,7 @@ fn test_function_parameter_parsing() {
         assert_eq!(program.statements.len(), 1);
 
         if let Statement::EXPRESSION(exp_stmnt) = &program.statements[0] {
-            if let Expression::FUNCTION(_, params, _) = &exp_stmnt.expression {
+            if let Expression::FUNCTION(_, params, _, _) = &exp_stmnt.expression {
                 for (param, exp) in params.iter().zip(expected) {
                     assert_eq!(param.value, exp);
                 }
@@ -446,7 +446,7 @@ fn test_parsing_hash_literals() {
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
-    if !program.is_ok(){
+    if !program.is_ok() {
         eprintln!("{:?}", program);
         assert!(false);
     }
@@ -478,7 +478,7 @@ fn test_parsing_empty_hash_literal() {
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
-    if !program.is_ok(){
+    if !program.is_ok() {
         eprintln!("{:?}", program);
         assert!(false);
     }
@@ -487,9 +487,30 @@ fn test_parsing_empty_hash_literal() {
     assert_eq!(program.statements.len(), 1);
 
     if let Statement::EXPRESSION(
-        ExpressionStatement { token: _, expression: 
-        Expression::HASH_LITERAL(_, k, v) }) = &program.statements[0] {
+        ExpressionStatement {
+            token: _, expression:
+        Expression::HASH_LITERAL(_, k, v)
+        }) = &program.statements[0] {
         assert_eq!(k.len(), 0);
         assert_eq!(v.len(), 0);
     } else { assert!(false); }
+}
+
+#[test]
+fn test_function_literal_with_name() {
+    let input = "let myFunction = fn(){};";
+
+    let l = Lexer::new(input).unwrap();
+    let mut p = Parser::new(l);
+
+    let program = p.parse_program().unwrap();
+
+    assert_eq!(1, program.statements.len());
+
+    let stmt = &program.statements[0];
+    if let Statement::LET(lts) = stmt {
+        if let Expression::FUNCTION(.., name) = &lts.value {
+            assert_eq!("myFunction", name, "function literal name wrong. want 'myFunction' got={name:?}");
+        } else { assert!(false, "Expression is not a Function!"); }
+    } else { assert!(false, "Statement is not a LetStatement, got {:?} instead", stmt); }
 }
